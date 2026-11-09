@@ -82,17 +82,55 @@ async function downloadGeneratedImage(rawUrl) {
   throw new Error('IMAGE_REDIRECT_LIMIT');
 }
 
+// EdgeOne may rewrite request.url to a platform-internal host while preserving
+// the browser's public Origin. Validate against the actual public project domains
+// instead of assuming request.url and Origin always have identical hosts.
+const PUBLIC_SITE_ORIGINS = new Set([
+  'https://pindou.sudashui.online',
+  'http://pindou.sudashui.online' // Transitional until HTTPS redirection is enabled.
+]);
+
+function isAllowedBrowserOrigin(originHeader, requestUrl, extraOrigins) {
+  if (!originHeader) return true; // Origin is a browser CSRF signal, not server authentication.
+  try {
+    const parsedOrigin = new URL(originHeader);
+    // An Origin header must contain only scheme + host (+ optional port).
+    if (originHeader !== parsedOrigin.origin || !['http:', 'https:'].includes(parsedOrigin.protocol)) {
+      return false;
+    }
+
+    const currentRequestOrigin = new URL(requestUrl).origin;
+    if (originHeader === currentRequestOrigin || PUBLIC_SITE_ORIGINS.has(originHeader)) {
+      return true;
+    }
+
+    // Optional exact allowlist for EdgeOne preview or additional custom domains.
+    // Comma-separated complete origins: https://preview.example.com,https://...
+    const additional = typeof extraOrigins === 'string' ? extraOrigins.split(',') : [];
+    return additional.some((candidate) => {
+      const value = candidate.trim();
+      if (!value) return false;
+      try {
+        const url = new URL(value);
+        return value === url.origin && url.origin === originHeader && url.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   const incomingOrigin = request.headers.get('origin');
-  if (incomingOrigin) {
-    try {
-      if (new URL(incomingOrigin).host !== new URL(request.url).host) {
-        return jsonError(403, '不允许跨站点调用 AI 服务。');
-      }
-    } catch {
-      return jsonError(403, '无效的请求来源。');
-    }
+  if (!isAllowedBrowserOrigin(
+    incomingOrigin,
+    request.url,
+    env?.AI_ALLOWED_ORIGINS || process.env.AI_ALLOWED_ORIGINS
+  )) {
+    return jsonError(403, '不允许跨站点调用 AI 服务。');
   }
 
   if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) {
