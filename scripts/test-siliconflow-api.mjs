@@ -5,16 +5,16 @@ const endpoint = 'https://pindou.sudashui.online/api/ai-optimize';
 const inputImage = 'data:image/png;base64,' + Buffer.from('fake-image-data').toString('base64');
 const defaultPayload = { imageBase64: inputImage, prompt: '转为干净的拼豆像素风格' };
 
-function createRequest(payload = defaultPayload, headers = {}) {
-  return new Request(endpoint, {
+function createRequest(payload = defaultPayload, headers = {}, requestUrl = endpoint) {
+  return new Request(requestUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(payload)
   });
 }
 
-async function call(payload = defaultPayload, env = { SILICONFLOW_API_KEY: 'test-key' }, headers = {}) {
-  return onRequestPost({ request: createRequest(payload, headers), env });
+async function call(payload = defaultPayload, env = { SILICONFLOW_API_KEY: 'test-key' }, headers = {}, requestUrl = endpoint) {
+  return onRequestPost({ request: createRequest(payload, headers, requestUrl), env });
 }
 
 async function expectJson(response, status, fragment) {
@@ -33,6 +33,46 @@ try {
   await expectJson(await call({ imageBase64: 'https://example.com/a.png', prompt: 'x' }), 400, '有效');
   await expectJson(await call({ imageBase64: inputImage, prompt: '' }), 400, '提示词');
   await expectJson(await call(defaultPayload, { SILICONFLOW_API_KEY: 'test-key' }, { origin: 'https://attacker.invalid' }), 403, '跨站点');
+
+  // EdgeOne reverse proxies can expose an internal request URL while the
+  // browser still correctly sends Origin: https://pindou.sudashui.online.
+  const proxiedUrl = 'https://internal-edgeone-runtime.example.net/api/ai-optimize';
+  await expectJson(
+    await call(defaultPayload, {}, { origin: 'https://pindou.sudashui.online' }, proxiedUrl),
+    503, 'SILICONFLOW_API_KEY'
+  );
+  await expectJson(
+    await call(defaultPayload, {}, { origin: 'http://pindou.sudashui.online' }, proxiedUrl),
+    503, 'SILICONFLOW_API_KEY'
+  );
+  await expectJson(
+    await call(defaultPayload, {}, { origin: 'https://pindou.sudashui.online.evil.example' }, proxiedUrl),
+    403, '跨站点'
+  );
+  await expectJson(
+    await call(defaultPayload, {}, { origin: 'https://attacker.invalid' }, proxiedUrl),
+    403, '跨站点'
+  );
+  await expectJson(
+    await call(defaultPayload, {}, { origin: 'null' }, proxiedUrl),
+    403, '跨站点'
+  );
+  // Official preview host works directly if the request URL matches it,
+  // or can be explicitly allowlisted when the platform rewrites the URL.
+  const preview = 'https://pindou-preview.edgeone.cool';
+  await expectJson(
+    await call(defaultPayload, {}, { origin: preview }, preview + '/api/ai-optimize'),
+    503, 'SILICONFLOW_API_KEY'
+  );
+  await expectJson(
+    await call(defaultPayload, { AI_ALLOWED_ORIGINS: preview }, { origin: preview }, proxiedUrl),
+    503, 'SILICONFLOW_API_KEY'
+  );
+  await expectJson(
+    await call(defaultPayload, { AI_ALLOWED_ORIGINS: preview }, { origin: 'https://other.edgeone.cool' }, proxiedUrl),
+    403, '跨站点'
+  );
+  console.log('PASS: EdgeOne reverse-proxy custom-domain Origin regression and preview allowlist');
 
   // Successful editing requests send the input IMAGE (not just a prompt),
   // authenticate server-side, and return a same-origin image byte stream.
