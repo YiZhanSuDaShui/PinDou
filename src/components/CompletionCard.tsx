@@ -175,12 +175,12 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
         if (isUsingPixelArt) {
           // ===== 拼豆原图模式：原图占主导 =====
           
-          // 深色渐变背景，更有质感
+          // XinXinXin 同款浅粉色渐变背景
           const gradient = ctx.createLinearGradient(0, 0, 0, cardHeight);
-          gradient.addColorStop(0, '#1a1a2e');
-          gradient.addColorStop(0.3, '#16213e');
-          gradient.addColorStop(0.7, '#0f3460');
-          gradient.addColorStop(1, '#533483');
+          gradient.addColorStop(0, '#FFF1F7');
+          gradient.addColorStop(0.3, '#FFE1ED');
+          gradient.addColorStop(0.7, '#F6CADE');
+          gradient.addColorStop(1, '#F3B6D3');
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, cardWidth, cardHeight);
 
@@ -230,7 +230,7 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
           ctx.drawImage(userImg, imageX, imageY, imageWidth, imageHeight);
 
           // 顶部区域：简洁的完成标识
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#563647';
           ctx.font = 'bold 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
           ctx.textAlign = 'center';
           ctx.shadowColor = 'rgba(0,0,0,0.3)';
@@ -242,7 +242,7 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
           const infoY = imageY + imageHeight + 40;
           
           // 信息文字 - 一行显示
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#563647';
           ctx.font = 'bold 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
           ctx.textAlign = 'center';
           ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -251,11 +251,11 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
 
           // 底部品牌信息
           ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-          ctx.fillStyle = 'rgba(255,255,255,0.7)';
-          ctx.fillText('LDB拼豆底稿生成器', cardWidth / 2, cardHeight - 50);
+          ctx.fillStyle = '#70475E';
+          ctx.fillText('XinXinXin拼豆底稿生成器', cardWidth / 2, cardHeight - 50);
           ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-          ctx.fillStyle = 'rgba(255,255,255,0.5)';
-          ctx.fillText('liang.348349.xyz', cardWidth / 2, cardHeight - 25);
+          ctx.fillStyle = '#81576C';
+          ctx.fillText('pindou.sudashui.online', cardWidth / 2, cardHeight - 25);
 
           resolve(canvas.toDataURL('image/jpeg', 0.95));
           
@@ -361,14 +361,14 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
 
               // 底部品牌信息
               ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-              ctx.fillStyle = 'rgba(255,255,255,0.8)';
+              ctx.fillStyle = '#70475E';
               ctx.textAlign = 'center';
               ctx.shadowColor = 'rgba(0,0,0,0.5)';
               ctx.shadowBlur = 4;
-              ctx.fillText('LDB拼豆底稿生成器', cardWidth / 2, cardHeight - 40);
+              ctx.fillText('XinXinXin拼豆底稿生成器', cardWidth / 2, cardHeight - 40);
               ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-              ctx.fillStyle = 'rgba(255,255,255,0.6)';
-              ctx.fillText('liang.348349.xyz', cardWidth / 2, cardHeight - 20);
+              ctx.fillStyle = '#81576C';
+              ctx.fillText('pindou.sudashui.online', cardWidth / 2, cardHeight - 20);
               ctx.shadowBlur = 0;
 
               resolve(canvas.toDataURL('image/jpeg', 0.95));
@@ -377,14 +377,14 @@ const CompletionCard: React.FC<CompletionCardProps> = ({
           } else {
             // 底部品牌信息
             ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.fillStyle = '#70475E';
             ctx.textAlign = 'center';
             ctx.shadowColor = 'rgba(0,0,0,0.5)';
             ctx.shadowBlur = 4;
-            ctx.fillText('LDB拼豆底稿生成器', cardWidth / 2, cardHeight - 40);
+            ctx.fillText('XinXinXin拼豆底稿生成器', cardWidth / 2, cardHeight - 40);
             ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx.fillText('liang.348349.xyz', cardWidth / 2, cardHeight - 20);
+            ctx.fillStyle = '#81576C';
+            ctx.fillText('pindou.sudashui.online', cardWidth / 2, cardHeight - 20);
             ctx.shadowBlur = 0;
 
             resolve(canvas.toDataURL('image/jpeg', 0.95));
