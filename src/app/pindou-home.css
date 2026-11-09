@@ -716,3 +716,79 @@
   color: #853d61 !important;
 }
 .studio-home .studio-noise-restore:hover { background: #f4cfdf !important; }
+
+/* Header install action: the same rose pill as the companion tagline.
+   The tagline disappears on phones; install stays right-aligned. */
+.studio-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+.studio-nav-actions .studio-nav-note {
+  min-height: 36px;
+  line-height: 18px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.studio-nav-actions .studio-nav-note::before { flex: 0 0 6px; }
+.studio-install-wrap { position: relative; flex: 0 0 auto; }
+.studio-nav-actions .studio-install-button {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, color .18s ease;
+}
+.studio-nav-actions .studio-install-button:hover {
+  border-color: #dbaac1;
+  background: #ffedf5;
+  color: #89506d;
+}
+.studio-nav-actions .studio-install-button:focus-visible,
+.studio-install-close:focus-visible {
+  outline: 2px solid #b96a91;
+  outline-offset: 3px;
+}
+.studio-install-help {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 11px);
+  right: 0;
+  width: min(290px, calc(100vw - 32px));
+  padding: 15px 16px;
+  border: 1px solid #ebcadb;
+  border-radius: 15px;
+  background: #fffafd;
+  box-shadow: 0 15px 38px rgba(112, 58, 85, .16);
+  color: #5c4150;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: normal;
+}
+.studio-install-help strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #503645;
+  font-size: 13px;
+}
+.studio-install-help p { margin: 0; }
+.studio-install-close {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 11px;
+  padding: 6px 12px;
+  border: 1px solid #efcfdd;
+  border-radius: 9px;
+  background: #fce9f2;
+  color: #834b68;
+  font-weight: 650;
+  cursor: pointer;
+}
+.studio-install-close:hover { background: #f7dbe8; }
+
+@media (max-width: 680px) {
+  .studio-nav-actions .studio-nav-tagline { display: none; }
+  .studio-nav-actions .studio-install-button { display: inline-flex; }
+}
