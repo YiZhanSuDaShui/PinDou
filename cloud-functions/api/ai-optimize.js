@@ -40,6 +40,25 @@ function isSafePublicHttpsUrl(value) {
   }
 }
 
+// SiliconFlow's CDN may serve a real PNG with the generic binary content type.
+// Trust the file's magic bytes rather than relying on the CDN's Content-Type.
+function detectImageMime(bytes) {
+  if (bytes.length >= 16 &&
+      bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) &&
+      bytes.toString('ascii', 12, 16) === 'IHDR') {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 12 &&
+      bytes.toString('ascii', 0, 4) === 'RIFF' &&
+      bytes.toString('ascii', 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  return null;
+}
+
 async function downloadGeneratedImage(rawUrl) {
   let currentUrl = rawUrl;
   for (let redirects = 0; redirects <= 3; redirects++) {
@@ -57,8 +76,9 @@ async function downloadGeneratedImage(rawUrl) {
     }
     if (!response.ok) throw new Error('IMAGE_DOWNLOAD_FAILED');
 
-    const mime = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('INVALID_IMAGE_TYPE');
+    // Do not reject application/octet-stream: SiliconFlow's S3 CDN returns
+    // this for genuine PNG files. Inspect the downloaded bytes below instead.
+    const declaredType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     const knownLength = Number(response.headers.get('content-length') || 0);
     if (knownLength > MAX_RESULT_BYTES) throw new Error('IMAGE_TOO_LARGE');
 
@@ -77,7 +97,16 @@ async function downloadGeneratedImage(rawUrl) {
       chunks.push(value);
     }
     if (!total) throw new Error('IMAGE_DOWNLOAD_FAILED');
-    return { bytes: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total), mime };
+    const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
+    const mime = detectImageMime(bytes);
+    if (!mime) {
+      console.warn('SiliconFlow CDN returned unsupported image bytes', {
+        declaredType,
+        length: total
+      });
+      throw new Error('INVALID_IMAGE_TYPE');
+    }
+    return { bytes, mime };
   }
   throw new Error('IMAGE_REDIRECT_LIMIT');
 }
@@ -206,6 +235,9 @@ export async function onRequestPost(context) {
     }
     if (error?.message === 'IMAGE_TOO_LARGE') {
       return jsonError(502, 'AI 返回的图片过大，超过当前服务可接收的大小限制。');
+    }
+    if (error?.message === 'INVALID_IMAGE_TYPE') {
+      return jsonError(502, 'AI 图片下载返回了无效格式，请稍后重试。');
     }
     console.error('SiliconFlow request failed:', error instanceof Error ? error.message : String(error));
     return jsonError(502, 'AI 图片编辑失败，请稍后重试。');

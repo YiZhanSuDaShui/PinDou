@@ -3,6 +3,7 @@ import { onRequestPost } from '../cloud-functions/api/ai-optimize.js';
 
 const endpoint = 'https://pindou.sudashui.online/api/ai-optimize';
 const inputImage = 'data:image/png;base64,' + Buffer.from('fake-image-data').toString('base64');
+const actualPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Wn8AAAAASUVORK5CYII=', 'base64');
 const defaultPayload = { imageBase64: inputImage, prompt: '转为干净的拼豆像素风格' };
 
 function createRequest(payload = defaultPayload, headers = {}, requestUrl = endpoint) {
@@ -92,8 +93,10 @@ try {
     }
     if (count === 2) {
       assert.equal(url, 'https://cdn.siliconflow.example.com/generated.png');
-      return new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), {
-        headers: { 'content-type': 'image/png' }
+      // Real SiliconFlow S3 URLs often return generic application/octet-stream
+      // even when the body is a valid PNG. This used to cause INVALID_IMAGE_TYPE.
+      return new Response(actualPng, {
+        headers: { 'content-type': 'application/octet-stream' }
       });
     }
     throw new Error('Unexpected fetch call ' + count);
@@ -101,9 +104,26 @@ try {
   const success = await call();
   assert.equal(success.status, 200);
   assert.equal(success.headers.get('content-type'), 'image/png');
-  assert.deepEqual([...new Uint8Array(await success.arrayBuffer())], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.deepEqual(Buffer.from(await success.arrayBuffer()), actualPng);
   assert.equal(count, 2);
-  console.log('PASS: authenticated SiliconFlow image-edit request and binary response');
+  console.log('PASS: genuine PNG with application/octet-stream accepted and returned with image/png');
+
+  // The MIME type should come from the body, not from a misleading response header.
+  for (const [bytes, expectedMime] of [
+    [Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), 'image/jpeg'],
+    [Buffer.from('RIFFxxxxWEBP', 'ascii'), 'image/webp']
+  ]) {
+    let calls = 0;
+    globalThis.fetch = async () => ++calls === 1
+      ? Response.json({ images: [{ url: 'https://cdn.siliconflow.example.com/output' }] })
+      : new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } });
+    const result = await call();
+    assert.equal(result.status, 200);
+    assert.equal(result.headers.get('content-type'), expectedMime);
+    assert.deepEqual(Buffer.from(await result.arrayBuffer()), bytes);
+    assert.equal(calls, 2);
+  }
+  console.log('PASS: JPEG and WebP file signatures recognized correctly');
 
   // Surface upstream quota/rate limit rather than leaking provider secrets.
   globalThis.fetch = async () => new Response('quota exceeded', { status: 429 });
@@ -118,15 +138,18 @@ try {
   await expectJson(await call(), 502, '失败');
   assert.equal(count, 1);
 
-  // Invalid upstream image data should not be returned as an image.
-  count = 0;
-  globalThis.fetch = async () => {
-    count++;
-    return count === 1
-      ? Response.json({ images: [{ url: 'https://cdn.siliconflow.example.com/generated.png' }] })
-      : new Response('<html>error</html>', { headers: { 'content-type': 'text/html' } });
-  };
-  await expectJson(await call(), 502, '失败');
+  // Reject HTML/errors even when the CDN lies and labels the response image/png.
+  for (const declaredType of ['text/html', 'image/png', 'application/octet-stream']) {
+    count = 0;
+    globalThis.fetch = async () => {
+      count++;
+      return count === 1
+        ? Response.json({ images: [{ url: 'https://cdn.siliconflow.example.com/generated.png' }] })
+        : new Response('<html>error</html>', { headers: { 'content-type': declaredType } });
+    };
+    await expectJson(await call(), 502, '无效格式');
+    assert.equal(count, 2);
+  }
 
   console.log('PASS: invalid input, missing key, cross-origin block, upstream errors and unsafe image URLs');
   console.log('PASS: all SiliconFlow API mock tests');

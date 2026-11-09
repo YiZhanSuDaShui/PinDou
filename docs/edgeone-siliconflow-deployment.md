@@ -6,7 +6,7 @@
 - 新服务端 API：`cloud-functions/api/ai-optimize.js` → `POST /api/ai-optimize`。
 - 服务端从 EdgeOne 环境变量读取 `SILICONFLOW_API_KEY`，调用硅基流动 `https://api.siliconflow.cn/v1/images/generations`。
 - 默认模型：`Qwen/Qwen-Image-Edit-2509`，发送 `prompt` 和 `image`（PNG/JPG/WEBP Data URL）。
-- 图片生成后由服务端即时下载，返回同源图片二进制，浏览器存为 Data URL。解决硅基流动临时 URL 仅一小时有效、以及浏览器跨域下载受限的问题。
+- 图片生成后由服务端即时下载，**通过 PNG/JPEG/WebP 文件签名识别真实格式**，返回同源图片二进制，浏览器存为 Data URL。解决硅基流动临时 URL 仅一小时有效、以及浏览器跨域下载受限的问题。SiliconFlow 的 `s3.siliconflow.cn` 可能返回 `Content-Type: application/octet-stream`，即使内容实际为 PNG；不能仅根据响应头判断图片类型。
 - 服务端每次请求最长运行 120 秒（`edgeone.json`），上游模型调用限定 100 秒，图片下载每次最多 12 秒。超时会返回明确提示。
 
 参考官方文档：
@@ -52,7 +52,7 @@
 
 **如果网站提示「不允许跨站点调用 AI 服务」**：确认已部署包含 [EdgeOne 自定义域名 Origin 校验修复](../cloud-functions/api/ai-optimize.js) 的最新 `main`。正式访问 `https://pindou.sudashui.online` 无需额外配置；如使用 EdgeOne 预览地址且被平台内部转发，可在生产/预览环境变量 `AI_ALLOWED_ORIGINS` 中添加**准确的**预览 Origin（例如 `https://pindou-abc.edgeone.cool`），不要填 `*` 或整个 `.edgeone.cool` 通配符。修改变量后须重新部署。
 
-若提示「AI 服务尚未配置」说明 `SILICONFLOW_API_KEY` 缺失或当前部署未重新构建。若 429 是上游并发限额或请求过于频繁。若 504 是 AI 请求超过超时限制，应缩小图片或稍后重试；最长 120 秒是 EdgeOne 平台限制，不保证所有模型请求均能完成。
+若提示「AI 服务尚未配置」说明 `SILICONFLOW_API_KEY` 缺失或当前部署未重新构建。若 429 是上游并发限额或请求过于频繁。 若日志出现 `INVALID_IMAGE_TYPE`，先检查是否部署包含 2026-11-10 PNG/JPEG/WebP 文件签名修复的最新 `main`；历史代码误将 CDN 的 `application/octet-stream` 直接当成无效图片。若 504 是 AI 请求超过超时限制，应缩小图片或稍后重试；最长 120 秒是 EdgeOne 平台限制，不保证所有模型请求均能完成。
 
 ## 4. 安全与成本
 
