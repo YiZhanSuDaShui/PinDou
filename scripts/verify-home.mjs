@@ -23,6 +23,11 @@ async function runCase(label, viewport) {
   assert.match(await page.locator('footer').innerText(), /XinXinXin拼豆底稿生成器/);
   assert.equal(await page.getByRole('button', { name: '请作者喝一杯奶茶' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '帮助教程' }).count(), 0);
+  // The optional PWA manifest remains supported, but the floating install
+  // promotion must never be rendered even after an install prompt event.
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt', { cancelable: true })));
+  assert.equal(await page.getByRole('button', { name: '安装应用' }).count(), 0,
+    label + ': floating install-app button must be removed');
   assert.equal((await page.locator('body').innerText()).includes('乐高积木拼豆'), false);
 
   // A real photo asset, not the previous 9-dot decorative mark.
