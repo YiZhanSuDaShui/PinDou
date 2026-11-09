@@ -425,3 +425,40 @@
 @media (prefers-reduced-motion: reduce) {
   .studio-home *, .studio-home *::before, .studio-home *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* The workflow dialogs receive the same tactile, quiet treatment as the landing page. */
+.studio-home .studio-modal-backdrop {
+  background: rgba(28, 37, 32, .52) !important;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+.studio-home .studio-modal-card {
+  overflow: hidden;
+  border: 1px solid #e9e4db !important;
+  border-radius: 21px !important;
+  background: #fffdfa !important;
+  color: #343b35;
+  box-shadow: 0 32px 80px rgba(32, 42, 36, .22) !important;
+}
+.studio-home .studio-modal-card h2,
+.studio-home .studio-modal-card h3 { color: #323a34 !important; letter-spacing: -.035em; }
+.studio-home .studio-modal-card input[type="range"] { accent-color: #365f56; }
+.studio-home .studio-modal-card input[type="checkbox"]:checked + div { background-color: #365f56 !important; }
+.studio-home .studio-modal-card button:focus-visible,
+.studio-home .studio-modal-card input:focus-visible { outline: 3px solid rgba(185, 109, 80, .22); outline-offset: 3px; }
+.studio-home .studio-modal-confirm {
+  border-radius: 10px;
+  background: #365f56 !important;
+  box-shadow: 0 4px 12px rgba(54, 95, 86, .12);
+  font-size: 13px;
+  font-weight: 650;
+}
+.studio-home .studio-modal-confirm:hover { background: #294e46 !important; }
+.studio-home .studio-modal-secondary {
+  background: #f0eee9 !important;
+  color: #56625a !important;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 620;
+}
+.studio-home .studio-modal-secondary:hover { background: #e9e5df !important; }
