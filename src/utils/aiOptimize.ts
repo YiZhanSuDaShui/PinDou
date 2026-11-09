@@ -143,12 +143,10 @@ export async function optimizeImageWithAI(
 
     onProgress?.(30);
 
-    // 调用API
+    // 通过同源 EdgeOne Cloud Function 调用硅基流动；密钥不会传给浏览器。
     const response = await fetch('/api/ai-optimize', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageBase64: base64Image,
         prompt: customPrompt || DEFAULT_PROMPT
@@ -158,31 +156,35 @@ export async function optimizeImageWithAI(
     onProgress?.(80);
 
     if (!response.ok) {
-      // 尝试解析JSON错误，如果失败则使用文本
-      let errorMessage: string;
+      const body = await response.text();
+      let errorMessage = `AI 请求失败（${response.status}）`;
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || `API request failed: ${response.status}`;
+        const errorData = JSON.parse(body) as { message?: string; error?: string };
+        errorMessage = errorData.message || errorData.error || errorMessage;
       } catch {
-        // 如果不是JSON，尝试获取文本
-        const errorText = await response.text();
-        errorMessage = errorText || `API request failed: ${response.status}`;
+        // 非 JSON 错误保持通用提示，不向用户展示网关 HTML。
       }
       throw new Error(errorMessage);
     }
 
-    const result = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) {
+      throw new Error('AI 响应不是有效图片，请稍后重试');
+    }
+
+    // 返回值是图片二进制：无需浏览器跨域下载临时 CDN 链接。
+    const imageBlob = await response.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('无法读取 AI 生成图片'));
+      reader.onerror = () => reject(new Error('无法读取 AI 生成图片'));
+      reader.readAsDataURL(imageBlob);
+    });
 
     onProgress?.(100);
-
-    if (result.success && result.imageUrl) {
-      return {
-        success: true,
-        imageUrl: result.imageUrl
-      };
-    } else {
-      throw new Error(result.error || 'Unknown error');
-    }
+    return { success: true, imageUrl: dataUrl };
 
   } catch (error) {
     console.error('AI optimization error:', error);
@@ -191,25 +193,4 @@ export async function optimizeImageWithAI(
       error: error instanceof Error ? error.message : 'AI optimization failed'
     };
   }
-}
-
-/**
- * 下载远程图片并转换为DataURL
- */
-export async function downloadImageAsDataURL(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
-  const blob = await response.blob();
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('Failed to convert image to data URL'));
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }

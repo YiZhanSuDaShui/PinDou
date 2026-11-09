@@ -1,7 +1,7 @@
 // Visual and functional smoke test for the static-exported XinXinXin homepage.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const url = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:4173';
@@ -53,6 +53,35 @@ try {
   await desktop.getByRole('button', { name: '下载拼豆图纸' }).click();
   await desktop.screenshot({ path: path.join(output, 'desktop-after-upload.png'), fullPage: true, animations: 'disabled' });
   console.log('upload / crop / canvas preview / download button OK');
+
+  // Mock paid SiliconFlow provider: no real account or charges during CI.
+  await desktop.getByRole('button', { name: '取消' }).last().click();
+  const fakeGeneratedImage = await readFile('public/icon-192x192.png');
+  let editApiCalls = 0;
+  await desktop.route('**/api/ai-optimize', async route => {
+    editApiCalls++;
+    const request = route.request();
+    const body = request.postDataJSON();
+    assert.equal(request.method(), 'POST');
+    assert.match(body.imageBase64, /^data:image\/(png|jpeg);base64,/);
+    assert.ok(typeof body.prompt === 'string' && body.prompt.length > 0);
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: fakeGeneratedImage,
+      headers: { 'Cache-Control': 'no-store' }
+    });
+  });
+
+  await desktop.getByRole('button', { name: 'AI优化' }).click();
+  await desktop.getByRole('heading', { name: 'AI 图片优化 · 硅基流动' }).waitFor();
+  await desktop.getByRole('button', { name: '开始优化' }).click();
+  await desktop.getByRole('button', { name: '使用此图' }).waitFor({ timeout: 15000 });
+  assert.equal(editApiCalls, 1);
+  await desktop.screenshot({ path: path.join(output, 'desktop-ai-optimized-mock.png'), animations: 'disabled' });
+  await desktop.getByRole('button', { name: '使用此图' }).click();
+  await desktop.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+  console.log('AI dialog / same-origin binary mock / use optimized image OK');
   await desktop.close();
 
   assert.deepEqual(pageErrors, [], 'Browser JavaScript errors: ' + pageErrors.join(' | '));

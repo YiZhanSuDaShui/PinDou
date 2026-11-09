@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { optimizeImageWithAI, downloadImageAsDataURL } from '../utils/aiOptimize';
+import { optimizeImageWithAI } from '../utils/aiOptimize';
 
 interface AIOptimizeModalProps {
   imageSrc: string;
@@ -41,9 +41,8 @@ export default function AIOptimizeModal({
       });
 
       if (result.success && result.imageUrl) {
-        // 下载优化后的图片
-        const dataUrl = await downloadImageAsDataURL(result.imageUrl);
-        setPreviewImage(dataUrl);
+        // 服务端已安全下载图片并通过同源接口返回 Data URL。
+        setPreviewImage(result.imageUrl);
       } else {
         // 处理错误，包括图片风险错误
         let errorMessage = result.error || '优化失败，请重试';
@@ -90,7 +89,7 @@ export default function AIOptimizeModal({
             <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            AI 图片优化
+            AI 图片优化 · 硅基流动
           </h2>
           <button
             onClick={onClose}
@@ -118,7 +117,7 @@ export default function AIOptimizeModal({
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm resize-none h-20 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              提示词将指导AI将图片转换为像素艺术风格，更适合制作拼豆图案
+              使用硅基流动图片编辑模型，保留原图主体并调整画风。每次优化会消耗 API 额度。
             </p>
           </div>
 
