@@ -35,6 +35,12 @@ async function runCase(label, viewport) {
   assert.ok(portraits.every(image => image.src === '/xinxinxin-logo.webp' && image.loaded),
     label + ': logo image failed to load: ' + JSON.stringify(portraits));
 
+  // At every viewport width, the badge should sit BELOW the hero portrait.
+  const avatarBox = await page.locator('.studio-hero-portrait').boundingBox();
+  const badgeBox = await page.locator('.studio-eyebrow').boundingBox();
+  assert.ok(avatarBox && badgeBox && badgeBox.y >= avatarBox.y + avatarBox.height + 5,
+    label + ': brand portrait and label overlap');
+
   const overflow = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     width: document.documentElement.scrollWidth,
