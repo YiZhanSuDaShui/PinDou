@@ -630,3 +630,89 @@
   .studio-has-image .studio-hero-photo { width: 58px; height: 58px; border-radius: 16px; }
   .studio-has-image .studio-portrait-heart { width: 22px; height: 22px; font-size: 10px; border-width: 2px; right: -9px; bottom: -4px; }
 }
+
+
+/* High-contrast editing controls: keep the light rose workspace readable even
+   when the visitor's operating system prefers dark mode. */
+.studio-home .studio-panel,
+.studio-home .studio-color-stats {
+  color: #4B3443;
+  color-scheme: light;
+}
+.studio-home .studio-color-toggle {
+  color: #513746 !important;
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 670;
+  text-align: left;
+}
+.studio-home .studio-color-toggle:hover { color: #a7587d !important; }
+.studio-home .studio-color-toggle:focus-visible,
+.studio-home .studio-color-option:focus-visible,
+.studio-home .studio-noise-row:focus-visible {
+  outline: 2px solid #b76c92;
+  outline-offset: 2px;
+}
+.studio-home .studio-color-option {
+  background: #fffafd !important;
+  border-color: #e8ccdb !important;
+  color: #503847 !important;
+  font-weight: 640;
+  box-shadow: none;
+}
+.studio-home .studio-color-option:not(.is-active):hover {
+  border-color: #be779b !important;
+  background: #fff0f7 !important;
+}
+.studio-home .studio-color-option.is-active {
+  background: #a7587d !important;
+  border-color: #a7587d !important;
+  color: #fff !important;
+  box-shadow: 0 5px 12px rgba(157, 77, 115, .18);
+}
+.studio-home .studio-custom-palette-button {
+  background: #a7587d;
+  border: 1px solid #9b5275;
+  color: #fff !important;
+}
+.studio-home .studio-custom-palette-button:hover { background: #8d4669; }
+.studio-home .studio-custom-palette-caption { color: #8b4c6d !important; }
+.studio-home .studio-panel select option { background: #fffafd !important; color: #503847 !important; }
+.studio-home .studio-noise-title {
+  color: #493443 !important;
+  font-weight: 740;
+}
+.studio-home .studio-noise-description {
+  color: #654b5b !important;
+  line-height: 1.7;
+  font-weight: 540;
+}
+.studio-home .studio-noise-row { color: #493443 !important; }
+.studio-home .studio-noise-row:not(.is-excluded):hover { background: #fff0f7 !important; }
+.studio-home .studio-noise-row.is-excluded {
+  background: #ffedf1 !important;
+  opacity: 1 !important;
+}
+.studio-home .studio-noise-row.is-excluded:hover { background: #ffe2e9 !important; }
+.studio-home .studio-noise-key { color: #473344 !important; }
+.studio-home .studio-noise-count { color: #66485a !important; }
+.studio-home .studio-noise-key.is-excluded,
+.studio-home .studio-noise-count.is-excluded { color: #943f5f !important; }
+.studio-home .studio-excluded-toggle {
+  border: 1px solid #eed3e0;
+  background: #fcecf4 !important;
+  color: #65445a !important;
+}
+.studio-home .studio-excluded-toggle:hover { background: #f8dce9 !important; }
+.studio-home .studio-excluded-toggle svg { color: #825772 !important; }
+.studio-home .studio-excluded-panel {
+  border-color: #efcfde !important;
+  background: #fff9fc !important;
+  color: #493443 !important;
+}
+.studio-home .studio-excluded-row:hover { background: #f8e7f0 !important; }
+.studio-home .studio-noise-restore {
+  background: #fbe3ee !important;
+  color: #853d61 !important;
+}
+.studio-home .studio-noise-restore:hover { background: #f4cfdf !important; }
