@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/generate-icons.js && next build",
     "start": "next start",
     "lint": "next lint",
     "pages:dev": "npx wrangler pages dev out --compatibility-flag=nodejs_compat",
