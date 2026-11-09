@@ -91,7 +91,7 @@ try {
         '.studio-noise-key', '.studio-noise-count'];
       const components = [...selectors];
       const luminance = (rgb) => {
-        const channels = rgb.match(/[\\d.]+/g)?.slice(0, 3).map(Number) || [0, 0, 0];
+        const channels = rgb.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) || [0, 0, 0];
         const linear = channels.map(value => {
           const channel = value / 255;
           return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
