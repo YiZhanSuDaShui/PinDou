@@ -1,6 +1,6 @@
 // AI图片优化工具函数
 
-const DEFAULT_PROMPT = '图片修改为：chibi画风，背景白底。pixel art style, 16-bit, retro game aesthetic, sharp focus, high contrast, clean lines, detailed pixel art, masterpiece, best quality';
+export const DEFAULT_AI_PROMPT = '图片修改为：chibi画风，背景白底。pixel art style, 16-bit, retro game aesthetic, sharp focus, high contrast, clean lines, detailed pixel art, masterpiece, best quality';
 
 export interface AIOptimizeOptions {
   customPrompt?: string;
@@ -149,7 +149,7 @@ export async function optimizeImageWithAI(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageBase64: base64Image,
-        prompt: customPrompt || DEFAULT_PROMPT
+        prompt: customPrompt || DEFAULT_AI_PROMPT
       })
     });
 
