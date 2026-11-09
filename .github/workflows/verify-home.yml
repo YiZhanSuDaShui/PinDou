@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'design/**'
+      - 'feat/**'
   pull_request:
     branches:
       - main
@@ -23,6 +24,8 @@ jobs:
           cache: npm
       - name: Install project dependencies
         run: npm ci
+      - name: Verify SiliconFlow image-edit endpoint with mocked API
+        run: node scripts/test-siliconflow-api.mjs
       - name: Type-check and create production export
         run: npm run build
       - name: Install smoke-test browser
