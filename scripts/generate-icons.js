@@ -1,62 +1,57 @@
+/**
+ * Build every browser/PWA icon from the user's supplied couple illustration.
+ * Runs before Next.js static export so EdgeOne and GitHub Actions ship matching icons.
+ */
 const sharp = require('sharp');
-const fs = require('fs');
-const path = require('path');
+const path = require('node:path');
 
-const sizes = [192, 256, 384, 512];
+const publicDir = path.join(__dirname, '..', 'public');
+const sourcePath = path.join(publicDir, 'xinxinxin-logo.webp');
 
-const generateIcon = async (size) => {
-  const svg = `
-<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#3B82F6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <rect width="${size}" height="${size}" rx="${size * 0.15}" fill="#000000"/>
-  <rect width="${size}" height="${size}" rx="${size * 0.15}" fill="url(#grad1)" opacity="0.1"/>
-  
-  <!-- 拼豆图案 -->
-  <g transform="translate(${size * 0.2}, ${size * 0.2})">
-    ${generatePixelPattern(size * 0.6)}
-  </g>
-  
-  <!-- 文字 -->
-  <text x="${size / 2}" y="${size * 0.85}" font-family="Arial, sans-serif" font-size="${size * 0.1}" font-weight="bold" text-anchor="middle" fill="white">拼豆</text>
-</svg>
-  `;
+const icons = [
+  { size: 32, name: 'favicon-32x32.png', inset: 1 },
+  { size: 180, name: 'apple-touch-icon.png' },
+  { size: 192, name: 'icon-192x192.png' },
+  { size: 256, name: 'icon-256x256.png' },
+  { size: 384, name: 'icon-384x384.png' },
+  { size: 512, name: 'icon-512x512.png' }
+];
 
-  const outputPath = path.join(__dirname, '..', 'public', `icon-${size}x${size}.png`);
-  
-  await sharp(Buffer.from(svg))
+async function generateIcon({ size, name, inset }) {
+  // Keep the faces in the safe zone for rounded homescreen icon masks.
+  const padding = inset ?? Math.round(size * 0.1);
+  const photoSize = size - 2 * padding;
+  const radius = Math.round(photoSize * 0.17);
+  const photo = await sharp(sourcePath)
+    .resize(photoSize, photoSize, { fit: 'cover' })
     .png()
-    .toFile(outputPath);
-    
-  console.log(`生成图标: ${outputPath}`);
-};
+    .toBuffer();
 
-function generatePixelPattern(size) {
-  const pixelSize = size / 8;
-  const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
-  let pattern = '';
-  
-  for (let y = 0; y < 6; y++) {
-    for (let x = 0; x < 6; x++) {
-      if (Math.random() > 0.3) {
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        pattern += `<rect x="${x * pixelSize}" y="${y * pixelSize}" width="${pixelSize * 0.9}" height="${pixelSize * 0.9}" rx="${pixelSize * 0.1}" fill="${color}" opacity="0.8"/>`;
-      }
-    }
-  }
-  
-  return pattern;
+  const clipMask = Buffer.from(
+    `<svg width="${photoSize}" height="${photoSize}" xmlns="http://www.w3.org/2000/svg">
+       <rect width="${photoSize}" height="${photoSize}" rx="${radius}" ry="${radius}" fill="#ffffff" />
+     </svg>`
+  );
+  const roundedPhoto = await sharp(photo)
+    .composite([{ input: clipMask, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+
+  await sharp({
+    create: { width: size, height: size, channels: 4, background: '#fff0f5' }
+  })
+    .composite([{ input: roundedPhoto, left: padding, top: padding }])
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(publicDir, name));
+
+  console.log(`Generated XinXinXin portrait icon: ${name}`);
 }
 
-async function generateAllIcons() {
-  for (const size of sizes) {
-    await generateIcon(size);
-  }
+async function main() {
+  for (const icon of icons) await generateIcon(icon);
 }
 
-generateAllIcons().catch(console.error);
+main().catch((error) => {
+  console.error('Failed to generate portrait icons:', error);
+  process.exitCode = 1;
+});
