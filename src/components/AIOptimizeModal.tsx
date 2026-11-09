@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { optimizeImageWithAI } from '../utils/aiOptimize';
+import React, { useState, useCallback, useEffect } from 'react';
+import { optimizeImageWithAI, DEFAULT_AI_PROMPT } from '../utils/aiOptimize';
 
 interface AIOptimizeModalProps {
   imageSrc: string;
@@ -22,7 +22,41 @@ export default function AIOptimizeModal({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
 
-  const DEFAULT_PROMPT = '图片修改为：chibi画风，背景白底。pixel art style, 16-bit, retro game aesthetic, sharp focus, high contrast, clean lines, detailed pixel art, masterpiece, best quality';
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    if (isOpen) setCopyStatus('idle');
+  }, [isOpen]);
+
+  const handleCopyPrompt = useCallback(async () => {
+    const text = customPrompt.trim() || DEFAULT_AI_PROMPT;
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch {
+      // Some browsers restrict the Clipboard API; try the legacy user-click fallback.
+    }
+    if (!copied) {
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', '');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.select();
+      try {
+        copied = document.execCommand('copy');
+      } catch {
+        copied = false;
+      } finally {
+        input.remove();
+      }
+    }
+    setCopyStatus(copied ? 'success' : 'error');
+  }, [customPrompt]);
 
   const handleOptimize = useCallback(async () => {
     if (!imageSrc) return;
@@ -33,7 +67,7 @@ export default function AIOptimizeModal({
     setPreviewImage(null);
 
     try {
-      const prompt = customPrompt.trim() || DEFAULT_PROMPT;
+      const prompt = customPrompt.trim() || DEFAULT_AI_PROMPT;
 
       const result = await optimizeImageWithAI(imageSrc, {
         customPrompt: prompt,
@@ -111,14 +145,36 @@ export default function AIOptimizeModal({
             </label>
             <textarea
               value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder={DEFAULT_PROMPT}
+              onChange={(e) => { setCustomPrompt(e.target.value); setCopyStatus('idle'); }}
+              placeholder={DEFAULT_AI_PROMPT}
               disabled={isProcessing || !!previewImage}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm resize-none h-20 focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              使用硅基流动图片编辑模型，保留原图主体并调整画风。每次优化会消耗 API 额度。
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-rose-100 bg-rose-50/65 px-3 py-2">
+              <p className="min-w-0 flex-1 text-xs leading-5 text-[#705061]">
+                正在使用 suda 的快捷 API 额度进行优化。若图片生成效果不佳，可使用 GPT 或豆包等更高级的模型，并使用上述提示词。
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyPrompt}
+                aria-label="一键复制提示词"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#e6bad0] bg-white px-3 py-1.5 text-xs font-semibold text-[#8a4e6c] shadow-sm transition-colors hover:border-[#cf91b1] hover:bg-[#fff0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b96a91]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="8" y="8" width="12" height="12" rx="2" strokeWidth={1.8} />
+                  <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {copyStatus === 'success' ? '已复制' : '一键复制'}
+              </button>
+              {copyStatus === 'error' && (
+                <p role="status" className="w-full text-xs font-medium text-[#984a63]">
+                  复制失败，请手动选择上方提示词。
+                </p>
+              )}
+              {copyStatus === 'success' && (
+                <span role="status" className="sr-only">提示词已复制到剪贴板</span>
+              )}
+            </div>
           </div>
 
           {/* 图片对比 */}
