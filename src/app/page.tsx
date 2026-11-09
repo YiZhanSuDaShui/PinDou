@@ -3,6 +3,7 @@
 import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, useCallback } from 'react';
 import Script from 'next/script';
 import Image from 'next/image';
+import InstallPWA from '../components/InstallPWA';
 import './pindou-home.css';
 
 // 导入像素化工具和类型
@@ -1984,7 +1985,10 @@ export default function Home() {
             <span className="studio-brand-caption">BEAD STUDIO</span>
           </span>
         </div>
-        <span className="studio-nav-note">为每一份小小的创意而来</span>
+        <div className="studio-nav-actions">
+          <InstallPWA />
+          <span className="studio-nav-note studio-nav-tagline">为每一份小小的创意而来</span>
+        </div>
       </nav>
       <header className="studio-hero">
         <div className="studio-confetti studio-confetti-left" aria-hidden="true">{Array.from({length:12},(_,i)=><span key={i}/>)}</div>
