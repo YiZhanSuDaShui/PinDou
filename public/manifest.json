@@ -1,11 +1,11 @@
 {
-  "name": "LDB拼豆底稿生成器",
-  "short_name": "LDB",
-  "description": "LDB拼豆底稿生成器，让你轻松制作精美的像素画作品",
+  "name": "XinXinXin拼豆底稿生成器",
+  "short_name": "XinXinXin",
+  "description": "XinXinXin的拼豆基地 · 拼豆AI生成 · 么么么么叽",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#E8F4FD",
-  "theme_color": "#5CA4F5",
+  "background_color": "#f9f8f5",
+  "theme_color": "#f9f8f5",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -44,6 +44,9 @@
       "form_factor": "wide"
     }
   ],
-  "categories": ["utilities", "productivity"],
+  "categories": [
+    "utilities",
+    "productivity"
+  ],
   "lang": "zh-CN"
 }
