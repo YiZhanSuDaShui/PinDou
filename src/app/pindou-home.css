@@ -1,16 +1,16 @@
 /* XinXinXin · Bead Studio
-   Warm editorial minimalism with small tactile pixel details.
+   Soft rose editorial minimalism with personalized portrait branding.
    Scoped to the homepage to leave the existing editing tools intact. */
 
 .studio-home {
-  --studio-paper: #f9f8f5;
-  --studio-ink: #2d302f;
-  --studio-soft-ink: #565b59;
-  --studio-muted: #858a86;
-  --studio-line: #e9e6df;
-  --studio-orange: #b96d50;
-  --studio-orange-soft: #fff0e7;
-  --studio-green: #365f56;
+  --studio-paper: #fff0f5;
+  --studio-ink: #352d35;
+  --studio-soft-ink: #66545e;
+  --studio-muted: #967f8c;
+  --studio-line: #efdae4;
+  --studio-orange: #a95b80;
+  --studio-orange-soft: #ffedf4;
+  --studio-green: #985273;
   position: relative;
   isolation: isolate;
   display: flex;
@@ -22,9 +22,9 @@
   color: var(--studio-ink);
   color-scheme: light;
   background:
-    radial-gradient(ellipse 420px 280px at 12% 28%, rgba(244, 213, 198, .34), transparent 75%),
-    radial-gradient(ellipse 490px 320px at 91% 36%, rgba(212, 225, 208, .34), transparent 78%),
-    linear-gradient(180deg, #fcfbf9 0%, #f9f8f5 54%, #f6f5f2 100%);
+    radial-gradient(ellipse 490px 340px at 12% 27%, rgba(249, 180, 210, .31), transparent 76%),
+    radial-gradient(ellipse 540px 380px at 91% 35%, rgba(248, 196, 225, .39), transparent 78%),
+    linear-gradient(180deg, #fff2f7 0%, #ffedf4 52%, #ffe8f1 100%);
   font-family: "Avenir Next", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -38,7 +38,7 @@
   height: 225px;
   pointer-events: none;
   opacity: .33;
-  background-image: radial-gradient(#ccbfb3 1px, transparent 1.5px);
+  background-image: radial-gradient(#d6a6be 1px, transparent 1.5px);
   background-size: 19px 19px;
   -webkit-mask-image: radial-gradient(circle, black 12%, transparent 71%);
   mask-image: radial-gradient(circle, black 12%, transparent 71%);
@@ -57,25 +57,26 @@
   border-bottom: 1px solid rgba(73, 69, 62, .09);
 }
 .studio-brand { display: flex; align-items: center; gap: 12px; }
-.studio-mark {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  width: 38px;
-  height: 38px;
-  padding: 8px;
-  border: 1px solid #ebd8cd;
-  border-radius: 12px;
-  background: #fff3ed;
-  box-shadow: 0 5px 12px rgba(119, 70, 43, .07);
-  transform: rotate(-6deg);
+/* The user's own illustration replaces the original decorative pixel logo. */
+.studio-brand-portrait {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 3px;
+  border: 1px solid rgba(234, 169, 196, .75);
+  border-radius: 19px;
+  background: #fff9fb;
+  box-shadow: 0 7px 20px rgba(145, 74, 106, .12), 0 1px 2px rgba(113, 54, 80, .08);
 }
-.studio-mark span { border-radius: 2px; background: #d9c5b9; }
-.studio-mark span:nth-child(2),
-.studio-mark span:nth-child(4),
-.studio-mark span:nth-child(6),
-.studio-mark span:nth-child(8) { background: #b96d50; }
-.studio-mark span:nth-child(5) { background: #e4a38b; }
+.studio-brand-photo {
+  display: block;
+  width: 50px;
+  height: 50px;
+  border-radius: 15px;
+  object-fit: cover;
+}
 .studio-brand-text { display: flex; flex-direction: column; gap: 3px; }
 .studio-brand-name { font-size: 15px; font-weight: 740; letter-spacing: -.035em; line-height: 1; }
 .studio-brand-caption { font-size: 9px; font-weight: 620; letter-spacing: .22em; color: #9c9790; }
@@ -105,8 +106,46 @@
   position: relative;
   z-index: 1;
   width: min(100%, 1000px);
-  padding: clamp(48px, 6.5vw, 88px) 10px 39px;
+  padding: clamp(34px, 4.4vw, 60px) 10px 37px;
   text-align: center;
+}
+/* Framed couple portrait, with a small heart as a quiet signature. */
+.studio-hero-portrait {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 106px;
+  height: 106px;
+  padding: 7px;
+  margin: 0 auto 19px;
+  border: 1px solid #efcadb;
+  border-radius: 31px;
+  background: rgba(255, 255, 255, .87);
+  box-shadow: 0 17px 38px rgba(165, 88, 124, .13), 0 3px 10px rgba(165, 88, 124, .08);
+  transform: rotate(-3deg);
+}
+.studio-hero-photo {
+  display: block;
+  width: 92px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 24px;
+}
+.studio-portrait-heart {
+  position: absolute;
+  right: -15px;
+  bottom: -7px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 3px solid #fff3f8;
+  border-radius: 12px;
+  background: #b86b90;
+  color: #fff;
+  font-size: 15px;
+  box-shadow: 0 4px 12px rgba(152, 72, 107, .15);
+  transform: rotate(13deg);
 }
 .studio-eyebrow {
   display: inline-flex;
@@ -397,7 +436,7 @@
 @media (max-width: 680px) {
   .studio-nav { min-height: 69px; }
   .studio-nav-note { display: none; }
-  .studio-hero { padding-top: 54px; padding-bottom: 31px; }
+  .studio-hero { padding-top: 36px; padding-bottom: 30px; }
   .studio-title { margin-top: 20px; font-size: clamp(33px, 9.2vw, 48px); letter-spacing: -.058em; }
   .studio-title-star { right: -.22em; }
   .studio-title-accent::after { height: 6px; }
@@ -462,3 +501,132 @@
   font-weight: 620;
 }
 .studio-home .studio-modal-secondary:hover { background: #e9e5df !important; }
+
+/* ── Rose Atelier palette ──
+   All editing controls remain legible; gentle pink belongs in the page,
+   while the cards and workspace stay nearly white. */
+.studio-nav { border-bottom-color: rgba(171, 101, 138, .15); }
+.studio-brand-name { color: #503744; }
+.studio-brand-caption { color: #af8299; }
+.studio-nav-note { border-color: #f0d7e4; background: rgba(255,255,255,.7); color: #8a6279; }
+.studio-nav-note::before { background: #d991b3; box-shadow: 0 0 0 3px #fbe3ef; }
+
+.studio-eyebrow { border-color: #f0d0df; color: #9c6282; background: rgba(255,255,255,.74); }
+.studio-eyebrow-dot { background: #cc7ea2; }
+.studio-title { color: #3d303a; }
+.studio-title-accent { color: #af577d; }
+.studio-title-accent::after { background: #f7bfd7; }
+.studio-title-star { color: #cb84a7; }
+.studio-subtitle { color: #53404c; }
+.studio-tagline { color: #9c798b; }
+.studio-tagline-heart { color: #c36a94; }
+.studio-confetti span { background: #f7b9d3; }
+.studio-confetti span:nth-child(3n) { background: #ef9fc4; }
+.studio-confetti span:nth-child(4n) { background: #e5b4d7; }
+
+.studio-upload-shell {
+  border-color: #f3dce6;
+  background: rgba(255,255,255,.83);
+  box-shadow: 0 2px 5px rgba(96, 56, 76, .025), 0 25px 65px rgba(143, 74, 112, .09);
+}
+.studio-workspace-heading-title { color: #634653; }
+.studio-workspace-heading-subtitle { color: #a17d8e; }
+.studio-workspace-index { background: #ffedf4; color: #a95078; }
+.studio-dropzone {
+  border-color: #e7bbce;
+  background: linear-gradient(145deg, #fff8fb 0%, #fff0f6 100%);
+}
+.studio-dropzone:hover,
+.studio-dropzone:focus-visible {
+  border-color: #c7759a;
+  background: #fff7fa;
+  box-shadow: inset 0 0 0 1px rgba(193, 91, 133, .15), 0 12px 26px rgba(173, 85, 123, .065);
+}
+.studio-dropzone:focus-visible { outline-color: rgba(192, 91, 130, .29); }
+.studio-upload-icon {
+  border-color: #f3d4e2;
+  background: #ffebf3;
+  color: #b3658b;
+  box-shadow: 0 8px 20px rgba(175, 80, 122, .09);
+}
+.studio-upload-title { color: #493842; }
+.studio-upload-description { color: #927889; }
+.studio-upload-link { color: #ae527b; text-decoration-color: #e8aac7; }
+.studio-formats span { border-color: #f1dce5; background: #fffafd; color: #a27e92; }
+.studio-note { border-color: #f1dbe5; background: rgba(255,255,255,.67); color: #866e7a; }
+.studio-note strong { color: #6e4d62; }
+.studio-note-icon { background: #fbe5f0; color: #b96b91; }
+.studio-step { color: #957786; }
+.studio-step-number { color: #c1769e; }
+.studio-step + .studio-step { border-left-color: #ebcddc; }
+.studio-footer { color: #a58595; }
+.studio-footer-divider { background: #deb3c9; }
+
+.studio-panel,
+.studio-preview-panel,
+.studio-color-stats {
+  border-color: #f1dfe7 !important;
+  background: rgba(255,253,254,.94) !important;
+  box-shadow: 0 16px 40px rgba(126,66,96,.065), 0 2px 5px rgba(126,66,96,.025) !important;
+}
+.studio-panel-heading { border-bottom-color: #f0dde6; }
+.studio-panel-step { color: #bf7098; }
+.studio-panel-heading h3, .studio-preview-heading strong { color: #52404b; }
+.studio-panel-heading p, .studio-preview-heading span { color: #a88a9b; }
+.studio-home .studio-panel label { color: #6a515f; }
+.studio-home .studio-panel input[type="number"],
+.studio-home .studio-panel select {
+  border-color: #efd9e5 !important;
+  background: #fff8fb !important;
+  color: #483943 !important;
+}
+.studio-home .studio-panel input[type="number"]:focus,
+.studio-home .studio-panel select:focus {
+  border-color: #bd6b91 !important;
+  box-shadow: 0 0 0 3px rgba(188,99,141,.15) !important;
+}
+.studio-btn:focus-visible { outline-color: rgba(192,92,138,.28); }
+.studio-btn-primary, .studio-btn-download {
+  background: #a7587d;
+  box-shadow: 0 7px 17px rgba(151, 73, 109, .14);
+}
+.studio-btn-primary:not(:disabled):hover,
+.studio-btn-download:not(:disabled):hover {
+  background: #8e4267;
+  box-shadow: 0 11px 26px rgba(151, 73, 109, .21);
+}
+.studio-btn-warm { border-color: #f3d9e6; background: #fff1f7; color: #a5577c; }
+.studio-btn-warm:not(:disabled):hover { background: #ffe8f1; }
+.studio-btn-subtle { border-color: #efdee7; background: #fff7fb; color: #91536f; }
+.studio-btn-subtle:not(:disabled):hover { background: #ffeaf3; }
+.studio-btn-manual { border-color: #ead5e0; background: #fff; color: #985575; }
+.studio-btn-manual:not(:disabled):hover { background: #fff6fa; }
+.studio-btn-focus { border-color: #f0dce6; background: #fcf2f7; color: #915672; }
+.studio-btn-focus:not(:disabled):hover { background: #f8e9f1; }
+.studio-preview-stage { border-color: #f0e0e8; background: #fff7fa !important; }
+.studio-home .studio-tip-alert { border-color: #f1dce6 !important; background: #fff4f9 !important; color: #86607a !important; }
+
+.studio-home .studio-modal-backdrop { background: rgba(57, 31, 47, .5) !important; }
+.studio-home .studio-modal-card { border-color: #efd6e3 !important; background: #fffafd !important; color: #4d3745; }
+.studio-home .studio-modal-card h2,
+.studio-home .studio-modal-card h3 { color: #483240 !important; }
+.studio-home .studio-modal-card input[type="range"] { accent-color: #ad5a82; }
+.studio-home .studio-modal-card input[type="checkbox"]:checked + div { background-color: #ad5a82 !important; }
+.studio-home .studio-modal-card button:focus-visible,
+.studio-home .studio-modal-card input:focus-visible { outline-color: rgba(192,92,138,.28); }
+.studio-home .studio-modal-confirm { background: #a7587d !important; box-shadow: 0 5px 15px rgba(151,73,109,.15); }
+.studio-home .studio-modal-confirm:hover { background: #8e4267 !important; }
+.studio-home .studio-modal-secondary { background: #faeaf1 !important; color: #87536b !important; }
+.studio-home .studio-modal-secondary:hover { background: #f4dce8 !important; }
+
+@media (max-width: 680px) {
+  .studio-nav { min-height: 75px; }
+  .studio-brand-portrait { width: 49px; height: 49px; border-radius: 16px; }
+  .studio-brand-photo { width: 43px; height: 43px; border-radius: 12px; }
+  .studio-hero-portrait { width: 90px; height: 90px; padding: 6px; border-radius: 27px; margin-bottom: 16px; }
+  .studio-hero-photo { width: 78px; height: 78px; border-radius: 21px; }
+  .studio-portrait-heart { width: 29px; height: 29px; font-size: 13px; right: -12px; bottom: -6px; }
+  .studio-has-image .studio-hero-portrait { width: 66px; height: 66px; padding: 4px; margin-bottom: 11px; border-radius: 20px; }
+  .studio-has-image .studio-hero-photo { width: 58px; height: 58px; border-radius: 16px; }
+  .studio-has-image .studio-portrait-heart { width: 22px; height: 22px; font-size: 10px; border-width: 2px; right: -9px; bottom: -4px; }
+}
