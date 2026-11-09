@@ -23,11 +23,62 @@ async function runCase(label, viewport) {
   assert.match(await page.locator('footer').innerText(), /XinXinXin拼豆底稿生成器/);
   assert.equal(await page.getByRole('button', { name: '请作者喝一杯奶茶' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '帮助教程' }).count(), 0);
-  // The optional PWA manifest remains supported, but the floating install
-  // promotion must never be rendered even after an install prompt event.
-  await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt', { cancelable: true })));
-  assert.equal(await page.getByRole('button', { name: '安装应用' }).count(), 0,
-    label + ': floating install-app button must be removed');
+  // A visible, restrained install pill belongs inside the header rather than
+  // floating in the lower-right corner.
+  const installButton = page.getByRole('button', { name: '安装应用' });
+  assert.equal(await installButton.count(), 1, label + ': expected exactly one install action');
+  const installBox = await installButton.boundingBox();
+  const navBox = await page.locator('.studio-nav').boundingBox();
+  const tagline = page.locator('.studio-nav-tagline');
+  const brand = await page.locator('.studio-brand').boundingBox();
+  const taglineBox = await tagline.boundingBox();
+  assert.ok(installBox && navBox && brand, label + ': header elements missing');
+  assert.ok(installBox.y >= navBox.y && installBox.y + installBox.height <= navBox.y + navBox.height,
+    label + ': install button is outside header bounds');
+  assert.ok(installBox.x > brand.x + brand.width, label + ': install overlaps logo');
+  if (viewport.width > 680) {
+    assert.ok(taglineBox, label + ': desktop tagline missing');
+    assert.ok(installBox.x + installBox.width <= taglineBox.x,
+      label + ': install action must appear left of the tagline');
+    assert.ok(Math.abs(installBox.height - taglineBox.height) <= 1,
+      label + ': install pill and tagline should be the same height');
+    const matchingStyles = await page.evaluate(() => {
+      const button = getComputedStyle(document.querySelector('.studio-install-button'));
+      const note = getComputedStyle(document.querySelector('.studio-nav-tagline'));
+      return ['borderRadius', 'paddingTop', 'paddingBottom', 'borderColor', 'backgroundColor', 'fontSize']
+        .map(prop => [prop, button[prop], note[prop]]);
+    });
+    assert.ok(matchingStyles.every(([, a, b]) => a === b),
+      label + ': install pill style differs from tagline: ' + JSON.stringify(matchingStyles));
+  } else {
+    assert.equal(taglineBox, null, label + ': mobile tagline should be hidden');
+    assert.ok(Math.abs(installBox.x + installBox.width - (navBox.x + navBox.width)) <= 2,
+      label + ': install button must align to top right on mobile');
+  }
+  const installPlacement = await installButton.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { position: style.position, background: style.backgroundColor, radius: style.borderRadius };
+  });
+  assert.notEqual(installPlacement.position, 'fixed', label + ': no floating install overlay');
+
+  // Browsers without beforeinstallprompt still get useful manual instructions.
+  await installButton.click();
+  await page.getByText('添加到桌面').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '知道了' }).click();
+
+  // On browsers with the PWA install event, clicking the header action
+  // must actually invoke the native install prompt.
+  await page.evaluate(() => {
+    window.__installTestCalls = 0;
+    const event = new Event('beforeinstallprompt', { cancelable: true });
+    Object.defineProperty(event, 'prompt', { value: async () => { window.__installTestCalls++; } });
+    Object.defineProperty(event, 'userChoice', { value: Promise.resolve({ outcome: 'dismissed' }) });
+    window.dispatchEvent(event);
+  });
+  await page.waitForTimeout(80);
+  await installButton.click();
+  const promptCalls = await page.evaluate(() => window.__installTestCalls);
+  assert.equal(promptCalls, 1, label + ': install action did not invoke native prompt');
   assert.equal((await page.locator('body').innerText()).includes('乐高积木拼豆'), false);
 
   // A real photo asset, not the previous 9-dot decorative mark.
