@@ -180,6 +180,7 @@ try {
   await desktop.getByRole('button', { name: '取消' }).last().click();
   const fakeGeneratedImage = await readFile('public/icon-192x192.png');
   let editApiCalls = 0;
+  let lastAiPrompt = '';
   await desktop.route('**/api/ai-optimize', async route => {
     editApiCalls++;
     const request = route.request();
@@ -187,6 +188,7 @@ try {
     assert.equal(request.method(), 'POST');
     assert.match(body.imageBase64, /^data:image\/(png|jpeg);base64,/);
     assert.ok(typeof body.prompt === 'string' && body.prompt.length > 0);
+    lastAiPrompt = body.prompt;
     await route.fulfill({
       status: 200,
       contentType: 'image/png',
@@ -197,9 +199,34 @@ try {
 
   await desktop.getByRole('button', { name: 'AI优化' }).click();
   await desktop.getByRole('heading', { name: 'AI 图片优化 · 硅基流动' }).waitFor();
+  await desktop.getByText('正在使用 suda 的快捷 API 额度进行优化', { exact: false }).waitFor();
+
+  // Copying uses the exact default prompt sent to the model, or the user's edits.
+  // Stub clipboard permissions, not the copy button's real event/logic.
+  await desktop.evaluate(() => {
+    window.__copiedAiPrompt = null;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async value => { window.__copiedAiPrompt = value; } }
+    });
+  });
+  const promptInput = desktop.locator('textarea[placeholder*="图片修改为：chibi"]');
+  const defaultAiPrompt = await promptInput.getAttribute('placeholder');
+  assert.match(defaultAiPrompt, /pixel art style, 16-bit, retro game aesthetic/);
+  const copyPromptButton = desktop.getByRole('button', { name: '一键复制提示词' });
+  await copyPromptButton.click();
+  assert.equal(await desktop.evaluate(() => window.__copiedAiPrompt), defaultAiPrompt);
+  await desktop.getByRole('status').getByText('提示词已复制到剪贴板').waitFor();
+
+  const customAiPrompt = '图片修改为：水彩插画风格，保持主题清晰。';
+  await promptInput.fill(customAiPrompt);
+  await copyPromptButton.click();
+  assert.equal(await desktop.evaluate(() => window.__copiedAiPrompt), customAiPrompt);
+  await promptInput.fill('');
   await desktop.getByRole('button', { name: '开始优化' }).click();
   await desktop.getByRole('button', { name: '使用此图' }).waitFor({ timeout: 15000 });
   assert.equal(editApiCalls, 1);
+  assert.equal(lastAiPrompt, defaultAiPrompt, 'copied default prompt must exactly match actual AI request');
   await desktop.screenshot({ path: path.join(output, 'desktop-ai-optimized-mock.png'), animations: 'disabled' });
   await desktop.getByRole('button', { name: '使用此图' }).click();
   await desktop.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
