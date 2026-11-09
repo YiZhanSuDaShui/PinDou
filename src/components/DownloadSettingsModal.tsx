@@ -52,8 +52,8 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden w-full max-w-md">
+    <div className="studio-modal-backdrop fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="studio-modal-card bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden w-full max-w-md">
         <div className="p-5">
           <div className="flex justify-between items-center border-b dark:border-gray-700 pb-3 mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">下载图纸设置</h3>
@@ -80,7 +80,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                   checked={tempOptions.showGrid}
                   onChange={(e) => handleOptionChange('showGrid', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
               </label>
             </div>
             
@@ -121,7 +121,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                         onClick={() => handleOptionChange('gridLineColor', colorOpt.value)}
                         className={`w-8 h-8 rounded-full border-2 transition-all duration-150 flex items-center justify-center 
                                     ${tempOptions.gridLineColor === colorOpt.value 
-                                      ? 'border-blue-500 ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-800' 
+                                      ? 'border-orange-600 ring-2 ring-orange-500 ring-offset-1' 
                                       : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}`}
                         title={colorOpt.name}
                       >
@@ -148,7 +148,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                   checked={tempOptions.showCoordinates}
                   onChange={(e) => handleOptionChange('showCoordinates', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
               </label>
             </div>
 
@@ -164,7 +164,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                   checked={!tempOptions.showCellNumbers}
                   onChange={(e) => handleOptionChange('showCellNumbers', !e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
               </label>
             </div>
             
@@ -180,7 +180,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                   checked={tempOptions.includeStats}
                   onChange={(e) => handleOptionChange('includeStats', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
               </label>
             </div>
 
@@ -201,7 +201,7 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
                   checked={tempOptions.exportCsv}
                   onChange={(e) => handleOptionChange('exportCsv', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
               </label>
             </div>
           </div>
@@ -209,13 +209,13 @@ const DownloadSettingsModal: React.FC<DownloadSettingsModalProps> = ({
           <div className="flex justify-end mt-6 space-x-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors"
+              className="studio-modal-secondary px-4 py-2 rounded-lg transition-colors"
             >
               取消
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              className="studio-modal-confirm px-4 py-2 text-white rounded-lg transition-colors"
             >
               下载图纸
             </button>

@@ -1,0 +1,42 @@
+name: Verify XinXinXin Homepage
+
+on:
+  push:
+    branches:
+      - 'design/**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Type-check and create production export
+        run: npm run build
+      - name: Install smoke-test browser
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install chromium --with-deps
+      - name: Test rendered desktop and mobile interfaces
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory out >/tmp/pindou-server.log 2>&1 &
+          node scripts/verify-home.mjs
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xinxinxin-home-screenshots
+          path: artifacts/home-smoke/
+          if-no-files-found: ignore
