@@ -24,17 +24,18 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon-32x32.png?v=rose2026", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192x192.png?v=rose2026", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png?v=rose2026", sizes: "512x512", type: "image/png" },
     ],
     apple: [
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/apple-touch-icon.png?v=rose2026", sizes: "180x180", type: "image/png" },
     ],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f9f8f5",
+  themeColor: "#fff0f5",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, useCallback } from 'react';
 import Script from 'next/script';
+import Image from 'next/image';
 import InstallPWA from '../components/InstallPWA';
 import './pindou-home.css';
 
@@ -1971,14 +1972,37 @@ export default function Home() {
     <div className={"studio-home" + (originalImageSrc ? " studio-has-image" : "")}>
       <nav className="studio-nav" aria-label="网站导航">
         <div className="studio-brand">
-          <span className="studio-mark" aria-hidden="true">{Array.from({length:9},(_,i)=><span key={i}/>)}</span>
-          <span className="studio-brand-text"><span className="studio-brand-name">XinXinXin</span><span className="studio-brand-caption">BEAD STUDIO</span></span>
+          <span className="studio-brand-portrait">
+            <Image
+              src="/xinxinxin-logo.webp"
+              alt="XinXinXin 双人插画 Logo"
+              width={50}
+              height={50}
+              priority
+              className="studio-brand-photo"
+            />
+          </span>
+          <span className="studio-brand-text">
+            <span className="studio-brand-name">XinXinXin</span>
+            <span className="studio-brand-caption">BEAD STUDIO</span>
+          </span>
         </div>
         <span className="studio-nav-note">为每一份小小的创意而来</span>
       </nav>
       <header className="studio-hero">
         <div className="studio-confetti studio-confetti-left" aria-hidden="true">{Array.from({length:12},(_,i)=><span key={i}/>)}</div>
         <div className="studio-confetti studio-confetti-right" aria-hidden="true">{Array.from({length:12},(_,i)=><span key={i}/>)}</div>
+        <div className="studio-hero-portrait">
+          <Image
+            src="/xinxinxin-logo.webp"
+            alt="XinXinXin 的拼豆基地插画"
+            width={92}
+            height={92}
+            priority
+            className="studio-hero-photo"
+          />
+          <span className="studio-portrait-heart" aria-hidden="true">♥</span>
+        </div>
         <div className="studio-eyebrow"><span className="studio-eyebrow-dot" aria-hidden="true"/> MADE WITH LOVE · 拼豆创作空间</div>
         <h1 className="studio-title"><span className="studio-title-first">XinXinXin的</span><span className="studio-title-accent">拼豆基地<span className="studio-title-star" aria-hidden="true">✳</span></span></h1>
         <h2 className="studio-subtitle">拼豆AI生成</h2>

@@ -23,15 +23,44 @@ async function runCase(label, viewport) {
   assert.equal(await page.getByRole('button', { name: '请作者喝一杯奶茶' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '帮助教程' }).count(), 0);
   assert.equal((await page.locator('body').innerText()).includes('乐高积木拼豆'), false);
+
+  // A real photo asset, not the previous 9-dot decorative mark.
+  const portraits = await page.locator('.studio-brand-portrait img, .studio-hero-portrait img').evaluateAll(
+    (images) => images.map(img => ({
+      src: new URL(img.currentSrc || img.src, location.href).pathname,
+      loaded: img.complete && img.naturalWidth >= 192 && img.naturalHeight >= 192
+    }))
+  );
+  assert.equal(portraits.length, 2, label + ': expected portrait in nav and hero');
+  assert.ok(portraits.every(image => image.src === '/xinxinxin-logo.webp' && image.loaded),
+    label + ': logo image failed to load: ' + JSON.stringify(portraits));
+
+  // At every viewport width, the badge should sit BELOW the hero portrait.
+  const avatarBox = await page.locator('.studio-hero-portrait').boundingBox();
+  const badgeBox = await page.locator('.studio-eyebrow').boundingBox();
+  assert.ok(avatarBox && badgeBox && badgeBox.y >= avatarBox.y + avatarBox.height + 5,
+    label + ': brand portrait and label overlap');
+
   const overflow = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     width: document.documentElement.scrollWidth,
     background: getComputedStyle(document.querySelector('.studio-home')).backgroundImage,
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
     dropColor: getComputedStyle(document.querySelector('.studio-dropzone')).borderColor
   }));
   assert.ok(overflow.width <= overflow.viewport + 1,
     label + ': horizontal overflow ' + JSON.stringify(overflow));
   assert.ok(overflow.background.includes('gradient'), label + ': studio CSS not loaded');
+  assert.equal(overflow.bodyBackground, 'rgb(255, 240, 245)', label + ': pink base background missing');
+  assert.match(overflow.background, /rgb\(255, 242, 247\)/, label + ': rose gradient missing');
+
+  const faviconResponse = await page.request.get(url + '/favicon-32x32.png');
+  assert.equal(faviconResponse.status(), 200, label + ': missing generated favicon');
+  assert.match(faviconResponse.headers()['content-type'] || '', /^image\/png/);
+
+  const manifestResponse = await page.request.get(url + '/manifest.json');
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.theme_color, '#fff0f5', label + ': PWA theme color differs from page');
   await page.screenshot({ path: path.join(output, label + '.png'), fullPage: true, animations: 'disabled' });
   console.log(label + ' landing page OK: ' + JSON.stringify(overflow));
   return page;

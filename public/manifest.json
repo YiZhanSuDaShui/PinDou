@@ -4,28 +4,28 @@
   "description": "XinXinXin的拼豆基地 · 拼豆AI生成 · 么么么么叽",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f9f8f5",
-  "theme_color": "#f9f8f5",
+  "background_color": "#fff0f5",
+  "theme_color": "#fff0f5",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "/icon-192x192.png?v=rose2026",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-256x256.png",
+      "src": "/icon-256x256.png?v=rose2026",
       "sizes": "256x256",
       "type": "image/png"
     },
     {
-      "src": "/icon-384x384.png",
+      "src": "/icon-384x384.png?v=rose2026",
       "sizes": "384x384",
       "type": "image/png"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/icon-512x512.png?v=rose2026",
       "sizes": "512x512",
       "type": "image/png"
     }
