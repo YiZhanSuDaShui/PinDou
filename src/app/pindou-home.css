@@ -112,7 +112,7 @@
 /* Framed couple portrait, with a small heart as a quiet signature. */
 .studio-hero-portrait {
   position: relative;
-  display: inline-grid;
+  display: grid;
   place-items: center;
   width: 106px;
   height: 106px;
