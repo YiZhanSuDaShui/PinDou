@@ -2139,7 +2139,9 @@ export default function Home() {
                 <div className="sm:col-span-2">
                   <button
                     onClick={() => setIsColorSystemCollapsed(!isColorSystemCollapsed)}
-                    className="flex items-center justify-between w-full text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2"
+                    aria-expanded={!isColorSystemCollapsed}
+                    aria-controls="studio-color-system-options"
+                    className="studio-color-toggle flex items-center justify-between w-full text-xs sm:text-sm font-semibold mb-1.5 sm:mb-2"
                   >
                     <span>色号系统:</span>
                     <svg
@@ -2153,17 +2155,13 @@ export default function Home() {
                     </svg>
                   </button>
                   {!isColorSystemCollapsed && (
-                    <div className="space-y-3">
+                    <div id="studio-color-system-options" className="space-y-3">
                       <div className="flex flex-wrap gap-2">
                         {colorSystemOptions.map(option => (
                           <button
                             key={option.key}
                             onClick={() => setSelectedColorSystem(option.key as ColorSystem)}
-                            className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex-shrink-0 ${
-                              selectedColorSystem === option.key
-                                ? 'bg-blue-500 text-white border-blue-500 shadow-md transform scale-105'
-                                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-600'
-                            }`}
+                            className={`studio-color-option px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex-shrink-0 ${selectedColorSystem === option.key ? 'is-active' : ''}`}
                           >
                             {option.name}
                           </button>
@@ -2174,7 +2172,7 @@ export default function Home() {
                       <div className="mt-3">
                         <button
                           onClick={() => setIsCustomPaletteEditorOpen(true)}
-                          className="w-full py-2.5 px-3 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:shadow-md hover:from-blue-600 hover:to-purple-600"
+                          className="studio-custom-palette-button w-full py-2.5 px-3 flex items-center justify-center gap-2 font-semibold rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z" clipRule="evenodd" />
@@ -2182,7 +2180,7 @@ export default function Home() {
                           管理色板 ({Object.values(customPaletteSelections).filter(Boolean).length} 色)
                         </button>
                         {isCustomPalette && (
-                          <p className="text-xs text-center text-blue-500 dark:text-blue-400 mt-1.5">当前使用自定义色板</p>
+                          <p className="studio-custom-palette-caption text-xs text-center mt-1.5">当前使用自定义色板</p>
                         )}
                       </div>
                     </div>
@@ -2285,11 +2283,11 @@ export default function Home() {
           // Apply dark mode styles to color counts container
           <div className="studio-color-stats w-full md:max-w-2xl mt-6 color-stats-panel">
             {/* Title color */}
-            <h3 className="text-lg font-semibold mb-1 text-gray-700 dark:text-gray-200 text-center">
+            <h3 className="studio-noise-title text-lg font-semibold mb-1 text-center">
               去除杂色 
             </h3>
             {/* Subtitle color */}
-            <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-3">点击下方列表中的颜色可将其从可用列表中排除。总计: {totalBeadCount} 颗</p>
+            <p className="studio-noise-description text-sm text-center mb-3">点击下方列表中的颜色可将其从可用列表中排除。总计: {totalBeadCount} 颗</p>
             <ul className="space-y-1 max-h-60 overflow-y-auto pr-2 text-sm">
               {Object.keys(colorCounts)
                 .sort(sortColorKeys)
@@ -2305,11 +2303,7 @@ export default function Home() {
                       key={hexKey}
                       onClick={() => handleToggleExcludeColor(hexKey)}
                        // Apply dark mode styles for list items (normal and excluded)
-                      className={`flex items-center justify-between p-1.5 rounded cursor-pointer transition-colors ${ 
-                        isExcluded
-                          ? 'bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-800/60 opacity-60 dark:opacity-70' // Darker red background for excluded
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
+                      className={`studio-noise-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${isExcluded ? 'is-excluded' : ''}`}
                       title={isExcluded ? `点击恢复 ${displayColorKey}` : `点击排除 ${displayColorKey}`}
                     >
                       <div className={`flex items-center space-x-2 ${isExcluded ? 'line-through' : ''}`}>
@@ -2319,10 +2313,10 @@ export default function Home() {
                           style={{ backgroundColor: isExcluded ? '#666' : colorHex }} // Darker gray for excluded swatch
                         ></span>
                         {/* Adjust text color for key (normal and excluded) */}
-                        <span className={`font-mono font-medium ${isExcluded ? 'text-red-700 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'}`}>{displayColorKey}</span>
+                        <span className={`studio-noise-key font-mono font-semibold ${isExcluded ? 'is-excluded' : ''}`}>{displayColorKey}</span>
                       </div>
                       {/* Adjust text color for count (normal and excluded) */}
-                      <span className={`text-xs ${isExcluded ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-600 dark:text-gray-300'}`}>{count} 颗</span>
+                      <span className={`studio-noise-count text-xs font-medium ${isExcluded ? 'is-excluded line-through' : ''}`}>{count} 颗</span>
                     </li>
                   );
                 })}
@@ -2331,7 +2325,7 @@ export default function Home() {
                 <div className="mt-3">
                   <button
                     onClick={() => setShowExcludedColors(prev => !prev)}
-                    className="w-full text-xs py-1.5 px-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors flex items-center justify-between"
+                    className="studio-excluded-toggle w-full text-xs font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-between"
                   >
                     <span>已排除的颜色 ({excludedColorKeys.size})</span>
                     <svg 
@@ -2346,20 +2340,20 @@ export default function Home() {
                   </button>
                   
                   {showExcludedColors && (
-                    <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 bg-gray-100 dark:bg-gray-800">
+                    <div className="studio-excluded-panel mt-2 border rounded-lg p-2">
                       <div className="max-h-40 overflow-y-auto">
                         {Array.from(excludedColorKeys).length > 0 ? (
                           <ul className="space-y-1">
                             {Array.from(excludedColorKeys).sort(sortColorKeys).map(hexKey => {
                               const colorData = fullBeadPalette.find(color => color.hex.toUpperCase() === hexKey.toUpperCase());
                               return (
-                                <li key={hexKey} className="flex justify-between items-center p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
+                                <li key={hexKey} className="studio-excluded-row flex justify-between items-center p-1.5 rounded">
                                   <div className="flex items-center space-x-2">
                                     <span
                                       className="inline-block w-4 h-4 rounded border border-gray-400 dark:border-gray-500 flex-shrink-0"
                                       style={{ backgroundColor: colorData?.hex || hexKey }}
                                     ></span>
-                                    <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{getColorKeyByHex(hexKey, selectedColorSystem)}</span>
+                                    <span className="studio-noise-key font-mono text-xs font-semibold">{getColorKeyByHex(hexKey, selectedColorSystem)}</span>
                                   </div>
                                   <button
                                     onClick={() => {
@@ -2372,7 +2366,7 @@ export default function Home() {
                                       setSelectedColor(null);
                                       console.log(`Restored color: ${hexKey}`);
                                     }}
-                                    className="text-xs py-0.5 px-2 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/40"
+                                    className="studio-noise-restore text-xs font-semibold py-1 px-3 rounded"
                                   >
                                     恢复
                                   </button>
