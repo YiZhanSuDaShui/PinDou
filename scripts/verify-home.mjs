@@ -319,11 +319,17 @@ try {
   }));
   assert.equal(persisted.session, null, 'remembered key must not retain an extra session copy');
   assert.ok(persisted.local?.includes(fakeApiKey), 'opted-in key must be in localStorage');
-  const newTab = await desktop.context().newPage();
-  await newTab.goto(url, { waitUntil: 'domcontentloaded' });
-  assert.ok((await newTab.evaluate(() => localStorage.getItem('pindou.custom-ai-provider.v1')))?.includes(fakeApiKey),
-    'remembered key should be accessible after opening a new tab in the same browser');
-  await newTab.close();
+  // browser.newPage() creates an owned context that forbids context.newPage().
+  // Transfer only the browser storage snapshot into a genuinely new context,
+  // as a fresh browser session would do for remembered localStorage entries.
+  const rememberedContext = await browser.newContext({
+    storageState: await desktop.context().storageState()
+  });
+  const rememberedTab = await rememberedContext.newPage();
+  await rememberedTab.goto(url, { waitUntil: 'domcontentloaded' });
+  assert.ok((await rememberedTab.evaluate(() => localStorage.getItem('pindou.custom-ai-provider.v1')))?.includes(fakeApiKey),
+    'remembered key should survive a fresh browser context');
+  await rememberedContext.close();
 
   await desktop.getByRole('button', { name: '使用自定义供应商' }).click();
   await providerDialog.getByRole('button', { name: '恢复默认' }).click();
