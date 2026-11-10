@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { optimizeImageWithAI, DEFAULT_AI_PROMPT } from '../utils/aiOptimize';
+import { clearCustomProvider, normalizeCustomProvider, optimizeWithCustomProvider, readCustomProvider, saveCustomProvider, type CustomAIProvider } from '../utils/customAiProvider';
 
 interface AIOptimizeModalProps {
   imageSrc: string;
@@ -23,10 +24,55 @@ export default function AIOptimizeModal({
   const [customPrompt, setCustomPrompt] = useState('');
 
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [provider, setProvider] = useState<CustomAIProvider | null>(null);
+  const [showProviderDialog, setShowProviderDialog] = useState(false);
+  const [providerDraft, setProviderDraft] = useState<CustomAIProvider>({
+    endpoint: '', apiKey: '', model: '', remember: false
+  });
+  const [providerError, setProviderError] = useState<string | null>(null);
+
+  // All small actions use the same pink pill design as "一键复制".
+  const pillClass = 'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#e6bad0] bg-white px-3 py-1.5 text-xs font-semibold text-[#8a4e6c] shadow-sm transition-colors hover:border-[#cf91b1] hover:bg-[#fff0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b96a91] disabled:cursor-not-allowed disabled:opacity-50';
+  const fieldClass = 'w-full rounded-xl border border-[#e6bad0] bg-white px-3 py-2.5 text-sm text-[#5f3f51] outline-none placeholder:text-[#b39aa8] focus:border-[#cf91b1] focus:ring-2 focus:ring-[#f9dce9]';
 
   useEffect(() => {
-    if (isOpen) setCopyStatus('idle');
+    if (isOpen) {
+      setCopyStatus('idle');
+      setProvider(readCustomProvider());
+      setShowProviderDialog(false);
+      setProviderError(null);
+    }
   }, [isOpen]);
+
+  const openProviderDialog = () => {
+    setProviderDraft(provider || { endpoint: '', apiKey: '', model: '', remember: false });
+    setProviderError(null);
+    setShowProviderDialog(true);
+  };
+
+  const handleSaveProvider = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const config = saveCustomProvider(normalizeCustomProvider(providerDraft));
+      setProvider(config);
+      setShowProviderDialog(false);
+      setProviderError(null);
+      setPreviewImage(null);
+      setError(null);
+    } catch (issue) {
+      setProviderError(issue instanceof Error ? issue.message : '保存失败，请检查配置。');
+    }
+  };
+
+  const handleUseDefault = () => {
+    clearCustomProvider();
+    setProvider(null);
+    setProviderDraft({ endpoint: '', apiKey: '', model: '', remember: false });
+    setShowProviderDialog(false);
+    setProviderError(null);
+    setPreviewImage(null);
+    setError(null);
+  };
 
   const handleCopyPrompt = useCallback(async () => {
     const text = customPrompt.trim() || DEFAULT_AI_PROMPT;
@@ -69,10 +115,10 @@ export default function AIOptimizeModal({
     try {
       const prompt = customPrompt.trim() || DEFAULT_AI_PROMPT;
 
-      const result = await optimizeImageWithAI(imageSrc, {
-        customPrompt: prompt,
-        onProgress: (p) => setProgress(p)
-      });
+      const options = { customPrompt: prompt, onProgress: (p: number) => setProgress(p) };
+      const result = provider
+        ? await optimizeWithCustomProvider(imageSrc, provider, options)
+        : await optimizeImageWithAI(imageSrc, options);
 
       if (result.success && result.imageUrl) {
         // 服务端已安全下载图片并通过同源接口返回 Data URL。
@@ -97,7 +143,7 @@ export default function AIOptimizeModal({
     } finally {
       setIsProcessing(false);
     }
-  }, [imageSrc, customPrompt]);
+  }, [imageSrc, customPrompt, provider]);
 
   const handleConfirm = useCallback(() => {
     if (previewImage) {
@@ -116,17 +162,28 @@ export default function AIOptimizeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            AI 图片优化 · 硅基流动
+            AI 图片优化
           </h2>
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={openProviderDialog}
+              disabled={isProcessing}
+              className={pillClass}
+            >
+              使用自定义供应商
+            </button>
           <button
             onClick={onClose}
+            type="button"
+            aria-label="关闭 AI 优化"
             disabled={isProcessing}
             className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
           >
@@ -134,6 +191,7 @@ export default function AIOptimizeModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          </div>
         </div>
 
         {/* 内容区域 */}
@@ -152,13 +210,15 @@ export default function AIOptimizeModal({
             />
             <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-rose-100 bg-rose-50/65 px-3 py-2">
               <p className="min-w-0 flex-1 text-xs leading-5 text-[#705061]">
-                正在使用 suda 的快捷 API 额度进行优化。若图片生成效果不佳，可使用 GPT 或豆包等更高级的模型，并使用上述提示词。
+                {provider
+                  ? `当前使用自定义供应商：${provider.model}。图片将直接发送到你填写的供应商。`
+                  : '正在使用 suda 的快捷 API 额度进行优化。若图片生成效果不佳，可使用 GPT 或豆包等更高级的模型，并使用上述提示词。'}
               </p>
               <button
                 type="button"
                 onClick={handleCopyPrompt}
                 aria-label="一键复制提示词"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#e6bad0] bg-white px-3 py-1.5 text-xs font-semibold text-[#8a4e6c] shadow-sm transition-colors hover:border-[#cf91b1] hover:bg-[#fff0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b96a91]"
+                className={pillClass}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="8" y="8" width="12" height="12" rx="2" strokeWidth={1.8} />
@@ -238,6 +298,77 @@ export default function AIOptimizeModal({
             </div>
           )}
         </div>
+
+        {showProviderDialog && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-[#3e2936]/40 p-4 backdrop-blur-[2px]">
+            <div role="dialog" aria-modal="true" aria-labelledby="ai-provider-title" className="w-full max-w-sm overflow-auto rounded-2xl border border-[#e6bad0] bg-[#fffafd] p-5 shadow-2xl max-h-full sm:p-6">
+              <h3 id="ai-provider-title" className="mb-4 text-base font-semibold text-[#6a3c53]">自定义供应商</h3>
+              <form onSubmit={handleSaveProvider} className="space-y-3">
+                <label className="block text-xs font-semibold text-[#795468]">
+                  API 接入点
+                  <input
+                    type="url"
+                    name="endpoint"
+                    required
+                    autoFocus
+                    autoComplete="off"
+                    placeholder="https://tken.lol/v1"
+                    value={providerDraft.endpoint}
+                    onChange={(event) => setProviderDraft(current => ({ ...current, endpoint: event.target.value }))}
+                    className={`mt-1.5 ${fieldClass}`}
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-[#795468]">
+                  API Key
+                  <input
+                    type="password"
+                    name="apiKey"
+                    required
+                    autoComplete="off"
+                    placeholder="sk-..."
+                    value={providerDraft.apiKey}
+                    onChange={(event) => setProviderDraft(current => ({ ...current, apiKey: event.target.value }))}
+                    className={`mt-1.5 ${fieldClass}`}
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-[#795468]">
+                  模型名称
+                  <input
+                    type="text"
+                    name="model"
+                    required
+                    autoComplete="off"
+                    placeholder="gpt-image-2.6"
+                    value={providerDraft.model}
+                    onChange={(event) => setProviderDraft(current => ({ ...current, model: event.target.value }))}
+                    className={`mt-1.5 ${fieldClass}`}
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[#795468]">
+                  <input
+                    type="checkbox"
+                    name="rememberKey"
+                    checked={providerDraft.remember}
+                    onChange={(event) => setProviderDraft(current => ({ ...current, remember: event.target.checked }))}
+                    className="h-4 w-4 accent-[#b5658a]"
+                  />
+                  在本机记住 Key
+                </label>
+                <p className="text-[11px] leading-5 text-[#9b798a]">
+                  默认仅保存在当前浏览器会话；勾选后保存在本机。Key 会直接发送给你填写的供应商，不经过 PinDou 服务器。
+                </p>
+                {providerError && <p role="alert" className="text-xs font-medium text-[#a44166]">{providerError}</p>}
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                  {provider && (
+                    <button type="button" className={pillClass} onClick={handleUseDefault}>恢复默认</button>
+                  )}
+                  <button type="button" className={pillClass} onClick={() => setShowProviderDialog(false)}>取消</button>
+                  <button type="submit" className={pillClass}>确认</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* 底部按钮 */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
