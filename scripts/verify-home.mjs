@@ -198,7 +198,7 @@ try {
   });
 
   await desktop.getByRole('button', { name: 'AI优化' }).click();
-  await desktop.getByRole('heading', { name: 'AI 图片优化 · 硅基流动' }).waitFor();
+  await desktop.getByRole('heading', { name: 'AI 图片优化', exact: true }).waitFor();
   await desktop.getByText('正在使用 suda 的快捷 API 额度进行优化', { exact: false }).waitFor();
 
   // Copying uses the exact default prompt sent to the model, or the user's edits.
@@ -231,6 +231,117 @@ try {
   await desktop.getByRole('button', { name: '使用此图' }).click();
   await desktop.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
   console.log('AI dialog / same-origin binary mock / use optimized image OK');
+
+  // Test the browser-direct provider without making paid calls or sending real
+  // credentials. The existing SiliconFlow path above must stay unchanged.
+  let customEditCalls = 0;
+  let imageLinkDownloads = 0;
+  let returnImageLink = false;
+  const fakeApiKey = 'sk-ci-only-never-real';
+  const mockEditUrl = 'https://mock-provider.example/v1/images/edits';
+  await desktop.route(mockEditUrl, async route => {
+    const request = route.request();
+    const corsHeaders = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'Authorization, Content-Type',
+      'access-control-allow-methods': 'POST, OPTIONS'
+    };
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: corsHeaders });
+      return;
+    }
+    customEditCalls++;
+    assert.equal(request.method(), 'POST');
+    assert.equal(request.headers().authorization, 'Bearer ' + fakeApiKey);
+    assert.match(request.headers()['content-type'] || '', /multipart\/form-data; boundary=/);
+    const multipart = request.postDataBuffer()?.toString('latin1') || '';
+    assert.match(multipart, /name="model"\r\n\r\ngpt-image-2\.6/);
+    assert.match(multipart, /name="prompt"\r\n\r\n/);
+    assert.match(multipart, /filename="pindou\.(png|jpg)"/);
+    await route.fulfill({
+      status: 200, contentType: 'application/json',
+      headers: corsHeaders,
+      body: JSON.stringify({ created: 1, data: [
+        returnImageLink
+          ? { url: 'https://mock-provider.example/generated.png' }
+          : { b64_json: fakeGeneratedImage.toString('base64') }
+      ] })
+    });
+  });
+  await desktop.route('https://mock-provider.example/generated.png', async route => {
+    imageLinkDownloads++;
+    await route.fulfill({
+      status: 200, contentType: 'image/png',
+      headers: { 'access-control-allow-origin': '*' },
+      body: fakeGeneratedImage
+    });
+  });
+
+  await desktop.getByRole('button', { name: 'AI优化' }).click();
+  await desktop.getByRole('button', { name: '使用自定义供应商' }).click();
+  const providerDialog = desktop.getByRole('dialog', { name: '自定义供应商' });
+  await providerDialog.waitFor();
+  await providerDialog.getByLabel('API 接入点').fill('https://mock-provider.example/v1');
+  await providerDialog.getByLabel('API Key').fill(fakeApiKey);
+  await providerDialog.getByLabel('模型名称').fill('gpt-image-2.6');
+  assert.equal(await providerDialog.getByLabel('在本机记住 Key').isChecked(), false);
+  await providerDialog.getByRole('button', { name: '确认' }).click();
+  await providerDialog.waitFor({ state: 'hidden' });
+  assert.match(await desktop.locator('body').innerText(), /当前使用自定义供应商：gpt-image-2.6/);
+  const sessionConfig = await desktop.evaluate(() => ({
+    session: sessionStorage.getItem('pindou.custom-ai-provider.v1'),
+    local: localStorage.getItem('pindou.custom-ai-provider.v1')
+  }));
+  assert.ok(sessionConfig.session?.includes(fakeApiKey), 'session-only provider must use sessionStorage');
+  assert.equal(sessionConfig.local, null, 'API key must not be persisted by default');
+
+  await desktop.getByRole('button', { name: '开始优化' }).click();
+  await desktop.getByRole('button', { name: '使用此图' }).waitFor({ timeout: 15000 });
+  assert.equal(customEditCalls, 1, 'custom provider should be called exactly once');
+  assert.equal(editApiCalls, 1, 'custom request must not consume the default API');
+  console.log('PASS: custom provider image upload, session-only key and base64 image result');
+
+  // The other supported result format is data[0].url (tken's previous result).
+  returnImageLink = true;
+  await desktop.getByRole('button', { name: '重新优化' }).click();
+  await desktop.getByRole('button', { name: '开始优化' }).click();
+  await desktop.getByRole('button', { name: '使用此图' }).waitFor({ timeout: 15000 });
+  assert.equal(customEditCalls, 2);
+  assert.equal(imageLinkDownloads, 1);
+  console.log('PASS: custom provider remote image URL result');
+
+  await desktop.getByRole('button', { name: '使用自定义供应商' }).click();
+  await providerDialog.getByLabel('在本机记住 Key').check();
+  await providerDialog.getByRole('button', { name: '确认' }).click();
+  const persisted = await desktop.evaluate(() => ({
+    session: sessionStorage.getItem('pindou.custom-ai-provider.v1'),
+    local: localStorage.getItem('pindou.custom-ai-provider.v1')
+  }));
+  assert.equal(persisted.session, null, 'remembered key must not retain an extra session copy');
+  assert.ok(persisted.local?.includes(fakeApiKey), 'opted-in key must be in localStorage');
+  // browser.newPage() creates an owned context that forbids context.newPage().
+  // Transfer only the browser storage snapshot into a genuinely new context,
+  // as a fresh browser session would do for remembered localStorage entries.
+  const rememberedContext = await browser.newContext({
+    storageState: await desktop.context().storageState()
+  });
+  const rememberedTab = await rememberedContext.newPage();
+  await rememberedTab.goto(url, { waitUntil: 'domcontentloaded' });
+  assert.ok((await rememberedTab.evaluate(() => localStorage.getItem('pindou.custom-ai-provider.v1')))?.includes(fakeApiKey),
+    'remembered key should survive a fresh browser context');
+  await rememberedContext.close();
+
+  await desktop.getByRole('button', { name: '使用自定义供应商' }).click();
+  await providerDialog.getByRole('button', { name: '恢复默认' }).click();
+  const cleared = await desktop.evaluate(() => ({
+    session: sessionStorage.getItem('pindou.custom-ai-provider.v1'),
+    local: localStorage.getItem('pindou.custom-ai-provider.v1')
+  }));
+  assert.deepEqual(cleared, { session: null, local: null }, 'reset should delete both key copies');
+  await desktop.getByText('正在使用 suda 的快捷 API 额度进行优化', { exact: false }).waitFor();
+  await desktop.getByRole('button', { name: '关闭 AI 优化' }).click();
+  console.log('PASS: remember key opt-in and reset to default provider');
+
 
   // Capture the actual exported PNG instead of only testing that the dialog opens.
   await desktop.evaluate(() => {
