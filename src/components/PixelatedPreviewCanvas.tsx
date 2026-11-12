@@ -255,6 +255,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
         onComplete={onHighlightComplete}
       />
     </div>
+  );
 };
 
 export default PixelatedPreviewCanvas; 
