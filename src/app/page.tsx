@@ -343,52 +343,11 @@ export default function Home() {
 
   // 放大镜像素编辑处理函数
   const handleMagnifierPixelEdit = (row: number, col: number, colorData: { key: string; color: string }) => {
-    if (!mappedPixelData) return;
-    
-    // 创建新的像素数据
-    const newMappedPixelData = mappedPixelData.map((rowData, r) =>
-      rowData.map((pixel, c) => {
-        if (r === row && c === col) {
-          return { 
-            key: colorData.key, 
-            color: colorData.color 
-          } as MappedPixel;
-        }
-        return pixel;
-      })
-    );
-    
-    setMappedPixelData(newMappedPixelData);
-    
-    // 更新颜色统计
-    if (colorCounts) {
-      const newColorCounts = { ...colorCounts };
-      
-      // 减少原颜色的计数
-      const oldPixel = mappedPixelData[row][col];
-      if (newColorCounts[oldPixel.key]) {
-        newColorCounts[oldPixel.key].count--;
-        if (newColorCounts[oldPixel.key].count === 0) {
-          delete newColorCounts[oldPixel.key];
-        }
-      }
-      
-      // 增加新颜色的计数
-      if (newColorCounts[colorData.key]) {
-        newColorCounts[colorData.key].count++;
-      } else {
-        newColorCounts[colorData.key] = {
-          count: 1,
-          color: colorData.color
-        };
-      }
-      
-      setColorCounts(newColorCounts);
-      
-      // 更新总计数
-      const newTotal = Object.values(newColorCounts).reduce((sum, item) => sum + item.count, 0);
-      setTotalBeadCount(newTotal);
-    }
+    const grid = currentGridRef.current;
+    if (!grid?.[row]?.[col]) return;
+    const next = grid.map(line => line.slice());
+    next[row][col] = { key: colorData.key, color: colorData.color, isExternal: false };
+    commitGridEdit(next);
   };
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -681,6 +640,8 @@ export default function Home() {
   const applyImportedCsvData = (grid: MappedPixel[][], dimensions: { N: number; M: number }) => {
     skipImportedCsvRemapRef.current = true;
     setExcludedColorKeys(new Set());
+    clearEditHistory();
+    currentGridRef.current = grid;
     setMappedPixelData(grid);
     setGridDimensions(dimensions);
     const counts: { [key: string]: { count: number; color: string } } = {};
@@ -796,6 +757,7 @@ export default function Home() {
 
   // 处理裁剪确认
   const handleCropConfirm = (croppedImageSrc: string) => {
+    clearEditHistory();
     setOriginalImageSrc(croppedImageSrc);
     setMappedPixelData(null);
     setGridDimensions(null);
@@ -842,6 +804,7 @@ export default function Home() {
 
   // 处理AI优化完成
   const handleAIOptimized = (optimizedImageSrc: string) => {
+    clearEditHistory();
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
     setMappedPixelData(null);
@@ -1155,6 +1118,8 @@ export default function Home() {
 
       // --- 绘制和状态更新 ---
       if (pixelatedCanvasRef.current) {
+        clearEditHistory();
+        currentGridRef.current = mergedData;
         setMappedPixelData(mergedData);
         setGridDimensions({ N, M });
 
@@ -1390,7 +1355,7 @@ export default function Home() {
 
             // 同时更新状态
             setExcludedColorKeys(nextExcludedKeys); // 应用此颜色的排除
-            setMappedPixelData(newMappedData); // 使用重映射的数据更新
+            commitGridEdit(newMappedData, currentExcluded, nextExcludedKeys); // 可撤销颜色排除
 
             // 基于*新*映射数据重新计算计数（以hex为键）
             const newCounts: { [hexKey: string]: { count: number; color: string } } = {};
@@ -1412,8 +1377,7 @@ export default function Home() {
 
             // ++ 在更新状态后，重新绘制 Canvas ++
             if (pixelatedCanvasRef.current && gridDimensions) {
-              setMappedPixelData(newMappedData);
-              // 不要调用 setGridDimensions，因为颜色排除不需要改变网格尺寸
+              // 已提交网格编辑；不要调用 setGridDimensions，因为颜色排除不需要改变网格尺寸
             } else {
                console.error("Canvas ref or grid dimensions missing, skipping draw call in handleToggleExcludeColor.");
             }
@@ -1424,6 +1388,7 @@ export default function Home() {
             console.log(`Re-including color: ${hexKey}. Triggering full remap.`);
             const nextExcludedKeys = new Set(currentExcluded);
             nextExcludedKeys.delete(hexKey);
+            clearEditHistory(); // 恢复颜色重新生成图纸，旧历史不可继续应用
             setExcludedColorKeys(nextExcludedKeys);
             // 此处无需重置 initialGridColorKeys，完全重映射会通过 pixelateImage 重新计算它
             setRemapTrigger(prev => prev + 1); // *** KEPT setRemapTrigger here for re-inclusion ***
@@ -1510,7 +1475,7 @@ export default function Home() {
       pushIfTarget(row, col + 1);
     }
 
-    setMappedPixelData(newPixelData);
+    commitGridEdit(newPixelData);
 
     const newColorCounts: { [hexKey: string]: { count: number; color: string } } = {};
     let newTotalCount = 0;
@@ -1579,7 +1544,7 @@ export default function Home() {
     }
     
     // 更新状态
-    setMappedPixelData(newPixelData);
+    commitGridEdit(newPixelData);
     
     // 重新计算颜色统计
     if (colorCounts) {
@@ -1666,68 +1631,13 @@ export default function Home() {
         return;
       }
 
-      // Manual Coloring Logic - 保持原有的上色逻辑
-      if (isClick && isManualColoringMode && selectedColor) {
-        // 手动上色模式逻辑保持不变
-        // ...现有代码...
-        const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
-        const currentCell = newPixelData[j]?.[i];
-
-        if (!currentCell) return;
-
-        const previousKey = currentCell.key;
-        const wasExternal = currentCell.isExternal;
-        
-        let newCellData: MappedPixel;
-        
-        if (selectedColor.key === TRANSPARENT_KEY) {
-          newCellData = { ...transparentColorData };
-        } else {
-          newCellData = { ...selectedColor, isExternal: false };
-        }
-
-        // Only update if state changes
-        if (newCellData.key !== previousKey || newCellData.isExternal !== wasExternal) {
-          newPixelData[j][i] = newCellData;
-          setMappedPixelData(newPixelData);
-
-          // Update color counts
-          if (colorCounts) {
-            const newColorCounts = { ...colorCounts };
-            let newTotalCount = totalBeadCount;
-
-            // 处理之前颜色的减少（使用hex值）
-            if (!wasExternal && previousKey !== TRANSPARENT_KEY) {
-              const previousCell = mappedPixelData[j][i];
-              const previousHex = previousCell?.color?.toUpperCase();
-              if (previousHex && newColorCounts[previousHex]) {
-                newColorCounts[previousHex].count--;
-                if (newColorCounts[previousHex].count <= 0) {
-                  delete newColorCounts[previousHex];
-              }
-              newTotalCount--;
-              }
-            }
-
-            // 处理新颜色的增加（使用hex值）
-            if (!newCellData.isExternal && newCellData.key !== TRANSPARENT_KEY) {
-              const newHex = newCellData.color.toUpperCase();
-              if (!newColorCounts[newHex]) {
-                newColorCounts[newHex] = {
-                  count: 0,
-                  color: newHex
-                };
-              }
-              newColorCounts[newHex].count++;
-              newTotalCount++;
-            }
-
-            setColorCounts(newColorCounts);
-            setTotalBeadCount(newTotalCount);
-          }
-        }
-        
-        // 上色操作后隐藏提示
+      // Ordinary click: one bead. Continuous painting uses pointer events.
+      if (isClick && isManualColoringMode && selectedColor && !isContinuousBrush) {
+        const next = mappedPixelData.map(line => line.slice());
+        if (!next[j]?.[i]) return;
+        next[j][i] = selectedColor.key === TRANSPARENT_KEY
+          ? { ...transparentColorData } : { ...selectedColor, isExternal: false };
+        commitGridEdit(next);
         setTooltipData(null);
       }
       // Tooltip Logic (非手动上色模式点击或悬停)
@@ -2046,7 +1956,7 @@ export default function Home() {
 
     if (replaceCount > 0) {
       // 更新像素数据
-      setMappedPixelData(newPixelData);
+      commitGridEdit(newPixelData);
 
       // 重新计算颜色统计
       if (colorCounts) {
