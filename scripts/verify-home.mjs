@@ -776,7 +776,20 @@ try {
   // Even during the prolonged hold, choosing B instantly interrupts A;
   // the previously lit beads fade quickly, with no waiting for its timer.
   await goldPage.locator('button[title*="#2C5B89"]').click();
-  await goldPage.waitForFunction(sampleRightGoldAndNoLeft, null, { timeout: 1800 });
+  // The moving light reaches B's LEFTMOST beads before its center. Inspect
+  // the same center pixels that the final assertion uses, after the old
+  // hold's 160ms crossfade has completely finished.
+  await goldPage.waitForFunction(() => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    const ctx = layer?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    const alpha = (col, row) => {
+      const x = Math.floor((col + .5) * layer.width / 40);
+      const y = Math.floor((row + .5) * layer.height / 12);
+      return ctx.getImageData(x, y, 1, 1).data[3];
+    };
+    return alpha(7, 5) <= 8 && alpha(32, 5) > 20;
+  }, null, { timeout: 1800 });
   const interruptedHold = await goldPage.evaluate(readOverlay);
   assert.ok(interruptedHold.left <= 8 && interruptedHold.right > 20,
     'switching palette colors must interrupt the old held beam: ' + JSON.stringify(interruptedHold));
