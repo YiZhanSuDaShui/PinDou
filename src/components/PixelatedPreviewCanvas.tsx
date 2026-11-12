@@ -20,6 +20,29 @@ interface PixelatedPreviewCanvasProps {
   onHighlightComplete?: () => void;
 }
 
+// Canvas defaults to 300×150 when it first mounts. Image upload normally
+// sizes it in pixelateImage(), but CSV/cloud-code restores intentionally skip
+// re-pixelation to preserve the saved beads. Without sizing the canvas here,
+// a portrait grid is stretched across the default landscape drawing surface.
+//
+// Preserve the existing dimensions on normal image uploads when they already
+// match the grid. For restored grids, choose a legible preview size while
+// bounding total pixels for unusually tall/wide CSV files.
+function ensureGridCanvasAspect(canvas: HTMLCanvasElement, dims: { N: number; M: number }) {
+  const { N, M } = dims;
+  if (!Number.isFinite(N) || !Number.isFinite(M) || N <= 0 || M <= 0) return;
+  const targetAspect = N / M;
+  const canvasAspect = canvas.width / Math.max(canvas.height, 1);
+  if (Math.abs(canvasAspect - targetAspect) / targetAspect <= 0.01) return;
+
+  const baseWidth = Math.min(1200, Math.max(500, N * 4));
+  const baseHeight = baseWidth * M / N;
+  const scale = Math.min(1, 8192 / Math.max(baseWidth, baseHeight),
+    Math.sqrt(16_000_000 / (baseWidth * baseHeight)));
+  canvas.width = Math.max(1, Math.round(baseWidth * scale));
+  canvas.height = Math.max(1, Math.round(baseHeight * scale));
+}
+
 // 绘制像素化画布的函数
 const drawPixelatedCanvas = (
   dataToDraw: MappedPixel[][],
@@ -138,7 +161,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   useEffect(() => {
     // Ensure darkModeState is not null before drawing
     if (mappedPixelData && gridDimensions && canvasRef.current && darkModeState !== null) {
-      console.log(`Redrawing canvas, dark mode: ${darkModeState}`); // Log redraw trigger
+      // CSV/cloud-code restores mount a fresh canvas (300×150 by HTML
+      // default), so set the drawing surface to the stored grid's aspect
+      // before painting. This does NOT recalculate or alter any bead colors.
+      ensureGridCanvasAspect(canvasRef.current, gridDimensions);
       drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting);
     }
   }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting]); // Add darkModeState dependency

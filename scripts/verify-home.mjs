@@ -158,6 +158,28 @@ try {
   );
   assert.equal(mobileButtons.length, 3, 'mobile should show three editor actions');
   assert.ok(mobileButtons.every(item => Math.abs(item.y - mobileButtons[0].y) < 2), 'mobile actions must be side-by-side');
+  // Avoid a previous click leaving the cursor hovering over just one button.
+  await mobile.mouse.move(1, 1);
+  await mobile.waitForTimeout(250);
+  const mobileButtonStyles = await mobile.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => {
+      const style = getComputedStyle(item);
+      return {
+        background: style.backgroundColor,
+        border: style.borderColor,
+        color: style.color,
+        shadow: style.boxShadow,
+        radius: style.borderRadius
+      };
+    })
+  );
+  assert.deepEqual(mobileButtonStyles[1], mobileButtonStyles[0],
+    'mobile: focus mode button must match manual edit button styling');
+  assert.deepEqual(mobileButtonStyles[2], mobileButtonStyles[0],
+    'mobile: archive button must match manual edit button styling');
+  assert.equal(mobileButtonStyles[0].background, 'rgb(255, 255, 255)',
+    'mobile: all three editor buttons should share white backgrounds');
+
   await mobile.screenshot({ path: path.join(output, 'mobile-three-actions.png'), animations: 'disabled' });
   await mobile.close();
 
@@ -231,6 +253,28 @@ try {
   assert.equal(await desktopActions.count(), 3, 'desktop should have exactly three editor buttons');
   const actionY = await desktopActions.evaluateAll(items => items.map(el => el.getBoundingClientRect().y));
   assert.ok(actionY.every(y => Math.abs(y - actionY[0]) < 2), 'desktop actions must be side by side');
+  // Compare the same idle state for all three buttons, not one hovered button.
+  await desktop.mouse.move(1, 1);
+  await desktop.waitForTimeout(250);
+  const desktopButtonStyles = await desktop.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => {
+      const style = getComputedStyle(item);
+      return {
+        background: style.backgroundColor,
+        border: style.borderColor,
+        color: style.color,
+        shadow: style.boxShadow,
+        radius: style.borderRadius
+      };
+    })
+  );
+  assert.deepEqual(desktopButtonStyles[1], desktopButtonStyles[0],
+    'desktop: focus mode button must match manual edit button styling');
+  assert.deepEqual(desktopButtonStyles[2], desktopButtonStyles[0],
+    'desktop: archive button must match manual edit button styling');
+  assert.equal(desktopButtonStyles[0].background, 'rgb(255, 255, 255)',
+    'desktop: all three editor buttons should share white backgrounds');
+
   await desktop.getByRole('button', { name: '生成对接码' }).click();
   const archiveModal = desktop.getByRole('dialog', { name: '已生成对接码' });
   await archiveModal.waitFor({ timeout: 15000 });
@@ -483,6 +527,89 @@ try {
   await restorePage.screenshot({ path: path.join(output, 'desktop-csv-restored.png'), animations: 'disabled' });
   await restorePage.close();
   console.log('PASS: cloud six-digit code restores the exact source CSV without remapping');
+
+
+  // Regression: previously a portrait CSV was drawn onto HTML canvas's default
+  // 300x150 bitmap, turning a tall person into a wide/squashed figure. The
+  // stored 36x84 grid must keep square beads when restored by code or local CSV.
+  const portraitColumns = 36;
+  const portraitRows = 84;
+  const portraitCsv = Array.from({ length: portraitRows }, (_, row) =>
+    Array.from({ length: portraitColumns }, (_, col) => {
+      if (col < 3 || col > 32 || row < 3 || row > 80) return 'TRANSPARENT';
+      return (row + col) % 11 === 0 ? '#B85F86' : '#FFF0F5';
+    }).join(',')
+  ).join('\n');
+
+  const checkPortraitCanvas = async (page, label) => {
+    await page.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('.studio-preview-stage canvas');
+      return canvas && canvas.height > canvas.width * 2;
+    }, { timeout: 15000 });
+    const metrics = await page.locator('.studio-preview-stage canvas').evaluate(canvas => {
+      const box = canvas.getBoundingClientRect();
+      return {
+        width: canvas.width, height: canvas.height,
+        cssWidth: box.width, cssHeight: box.height
+      };
+    });
+    const gridRatio = portraitColumns / portraitRows;
+    assert.ok(Math.abs(metrics.width / metrics.height - gridRatio) < .01,
+      label + ': intrinsic canvas ratio must match portrait grid ' + JSON.stringify(metrics));
+    assert.ok(Math.abs(metrics.cssWidth / metrics.cssHeight - gridRatio) < .02,
+      label + ': displayed canvas ratio must preserve portrait image ' + JSON.stringify(metrics));
+    assert.ok(Math.abs((metrics.width / portraitColumns) / (metrics.height / portraitRows) - 1) < .01,
+      label + ': rendered beads must have approximately square cells');
+    await page.screenshot({
+      path: path.join(output, label + '-portrait-csv.png'),
+      animations: 'disabled'
+    });
+    return metrics;
+  };
+
+  const portraitPage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  portraitPage.on('pageerror', error => pageErrors.push('portrait code restore: ' + error.message));
+  let portraitResaved = false;
+  await portraitPage.route('**/api/archive*', async route => {
+    if (route.request().method() === 'GET') {
+      assert.equal(new URL(route.request().url()).searchParams.get('code'), '002718');
+      await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8',
+        body: portraitCsv });
+    } else {
+      const body = route.request().postDataJSON();
+      assert.equal(body.csv, portraitCsv,
+        'portrait cloud restore must preserve cell order and transparent markers');
+      portraitResaved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: '001009' }) });
+    }
+  });
+  await portraitPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await portraitPage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await portraitPage.getByRole('textbox', { name: '六位数字对接码' }).fill('002718');
+  await portraitPage.locator('.studio-archive-import')
+    .getByRole('button', { name: '确认', exact: true }).click();
+  const codeMetrics = await checkPortraitCanvas(portraitPage, 'code-restored');
+  await portraitPage.getByRole('button', { name: '生成对接码' }).click();
+  await portraitPage.getByRole('dialog', { name: '已生成对接码' })
+    .getByText('001009').waitFor();
+  assert.equal(portraitResaved, true);
+  await portraitPage.close();
+
+  const filePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  filePage.on('pageerror', error => pageErrors.push('portrait CSV file import: ' + error.message));
+  await filePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await filePage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  filePage.on('dialog', dialog => dialog.accept());
+  await filePage.locator('input[type="file"][accept*="image/png"]').setInputFiles({
+    name: 'portrait-grid.csv', mimeType: 'text/csv', buffer: Buffer.from(portraitCsv)
+  });
+  const fileMetrics = await checkPortraitCanvas(filePage, 'file-restored');
+  assert.equal(fileMetrics.width, codeMetrics.width);
+  assert.equal(fileMetrics.height, codeMetrics.height);
+  await filePage.close();
+  console.log('PASS: portrait CSV code/file imports preserve aspect ratio, square cells and exact grid');
 
   await desktop.close();
 
