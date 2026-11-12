@@ -134,7 +134,8 @@ export async function loadArchive(code, store) {
   return normalizeCsv(csv);
 }
 
-export async function onRequestPost({ request, env = {} }) {
+export async function onRequestPost(context) {
+  const { request, env = {} } = context;
   if (!isAllowedOrigin(request, env)) return json(403, { message: '此来源不能保存图纸。' });
   if (tooManyRequests(request, 'save')) return json(429, { message: '操作太频繁，请稍后再试。' }, { 'Retry-After': '60' });
   if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) {
@@ -156,7 +157,7 @@ export async function onRequestPost({ request, env = {} }) {
     return json(400, { message: error.message });
   }
   try {
-    const code = await saveArchive(csv, getStore(STORE_NAME));
+    const code = await saveArchive(csv, context.archiveStore || getStore(STORE_NAME));
     return json(200, { code });
   } catch (error) {
     console.error('Archive write failed:', error?.name || 'UnknownError');
@@ -164,13 +165,14 @@ export async function onRequestPost({ request, env = {} }) {
   }
 }
 
-export async function onRequestGet({ request, env = {} }) {
+export async function onRequestGet(context) {
+  const { request, env = {} } = context;
   if (!isAllowedOrigin(request, env)) return json(403, { message: '此来源不能读取图纸。' });
   if (tooManyRequests(request, 'load')) return json(429, { message: '尝试次数过多，请稍后再试。' }, { 'Retry-After': '60' });
   const code = new URL(request.url).searchParams.get('code');
   if (!CODE_PATTERN.test(code || '')) return json(400, { message: '请输入完整的六位数字对接码。' });
   try {
-    const csv = await loadArchive(code, getStore(STORE_NAME));
+    const csv = await loadArchive(code, context.archiveStore || getStore(STORE_NAME));
     if (csv === null) return json(404, { message: '未找到对应图纸，请检查六位对接码。' });
     return new Response(csv, {
       status: 200,
