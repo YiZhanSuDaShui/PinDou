@@ -208,6 +208,9 @@ try {
   await desktop.getByRole('button', { name: '下载拼豆图纸' }).click();
   await desktop.screenshot({ path: path.join(output, 'desktop-after-upload.png'), fullPage: true, animations: 'disabled' });
   console.log('upload / crop / canvas preview / download button OK');
+  // Close download settings before clicking cloud archive actions.
+  await desktop.getByRole('heading', { name: '下载图纸设置' }).waitFor();
+  await desktop.getByRole('button', { name: '取消' }).last().click();
 
   // Mock the archive API (zero real Blob quota). Save must serialize the
   // current visible bead grid, not the previously uploaded source image.
@@ -240,7 +243,6 @@ try {
 
 
   // Mock paid SiliconFlow provider: no real account or charges during CI.
-  await desktop.getByRole('button', { name: '取消' }).last().click();
   const fakeGeneratedImage = await readFile('public/icon-192x192.png');
   let editApiCalls = 0;
   let lastAiPrompt = '';
