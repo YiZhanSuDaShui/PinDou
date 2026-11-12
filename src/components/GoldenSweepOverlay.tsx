@@ -62,8 +62,8 @@ function buildSweep(
   const span = last - first + 1;
   return {
     id: request.id, columns, first, last,
-    start: first - 2.6, end: last + 3.0,
-    radius: Math.max(1.45, Math.min(3.2, span * 0.10)),
+    start: first - 1.7, end: last + 2.7,
+    radius: Math.max(2.25, Math.min(3.3, span * 0.10)),
     duration: Math.min(850, 455 + 360 * span / Math.max(1, dims.N)),
     started: now
   };
@@ -113,6 +113,23 @@ function paintGold(
         ctx.strokeRect(bx + 0.5, by + 0.5,
           Math.max(0, cellWidth - 1), Math.max(0, cellHeight - 1));
       }
+    }
+  }
+}
+
+
+function paintStaticGold(
+  ctx: CanvasRenderingContext2D, sweep: Sweep,
+  cellWidth: number, cellHeight: number
+) {
+  // Reduced-motion users see a short stationary locator instead of a sweep.
+  // One pass over matching beads, without re-creating column maps per frame.
+  ctx.fillStyle = 'rgba(246, 201, 85, 0.52)';
+  for (let x = sweep.first; x <= sweep.last; x++) {
+    const rows = sweep.columns[x];
+    if (!rows) continue;
+    for (const y of rows) {
+      ctx.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
     }
   }
 }
@@ -168,10 +185,7 @@ export default function GoldenSweepOverlay({
       if (reducedMotion) {
         // Accessibility: a brief static color locator instead of travel.
         if (elapsed < 220) {
-          for (let x = sweep.first; x <= sweep.last; x++) {
-            paintGold(ctx, { ...sweep, columns: sweep.columns.map((rows, col) => col === x ? rows : undefined) },
-              x + 0.5, 0.72, cellWidth, cellHeight);
-          }
+          paintStaticGold(ctx, sweep, cellWidth, cellHeight);
         }
       } else {
         const head = headAt(sweep, time);
