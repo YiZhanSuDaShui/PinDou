@@ -28,8 +28,8 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         onClick={onTogglePalette}
         className={`w-12 h-12 rounded-full shadow-lg transition-all duration-200 flex items-center justify-center ${
           isPaletteOpen
-            ? 'bg-blue-500 text-white hover:bg-blue-600'
-            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600'
+            ? 'bg-[#eb609c] text-white hover:bg-[#d94787]'
+            : 'bg-[#fff8fb] dark:bg-[#4b2d3f] text-[#9f5276] dark:text-[#ffb9d7] hover:bg-[#ffe6f1] dark:hover:bg-[#63394f] border border-[#f5c7db] dark:border-[#80516a]'
         }`}
         title={isPaletteOpen ? '关闭调色盘' : '打开调色盘'}
       >
@@ -43,7 +43,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         onClick={onToggleMagnifier}
         className={`w-12 h-12 rounded-full shadow-lg transition-all duration-200 flex items-center justify-center ${
           isMagnifierActive
-            ? 'bg-green-500 text-white hover:bg-green-600'
+            ? 'bg-[#c678b4] text-white hover:bg-[#b0649e]'
             : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600'
         }`}
         title={isMagnifierActive ? '关闭放大镜' : '打开放大镜'}
@@ -56,7 +56,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
       {/* 退出手动编辑模式按钮 */}
       <button
         onClick={onExitManualMode}
-        className="w-12 h-12 rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600 transition-all duration-200 flex items-center justify-center"
+        className="w-12 h-12 rounded-full bg-[#e78892] text-white shadow-lg hover:bg-[#d46c7a] transition-all duration-200 flex items-center justify-center"
         title="退出手动编辑模式"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
