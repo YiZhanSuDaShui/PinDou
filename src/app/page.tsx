@@ -2402,6 +2402,10 @@ export default function Home() {
                     gridDimensions={gridDimensions}
                     isManualColoringMode={isManualColoringMode}
                     onInteraction={handleCanvasInteraction}
+                    isContinuousBrush={isManualColoringMode && isContinuousBrush && !isEraseMode && !colorReplaceState.isActive && !!selectedColor}
+                    onBrushStart={startBrush}
+                    onBrushMove={moveBrush}
+                    onBrushEnd={finishBrush}
                     highlightRequest={highlightRequest}
                     onHighlightComplete={handleHighlightComplete}
                   />
@@ -2684,6 +2688,17 @@ export default function Home() {
           selectedColorSystem={selectedColorSystem}
           isEraseMode={isEraseMode}
           onEraseToggle={handleEraseToggle}
+          isContinuousBrush={isContinuousBrush}
+          onContinuousBrushToggle={() => {
+            finishBrush();
+            setIsContinuousBrush(previous => !previous);
+            setIsEraseMode(false);
+            setColorReplaceState({ isActive: false, step: 'select-source' });
+          }}
+          undoCount={historyStatus.undo}
+          redoCount={historyStatus.redo}
+          onUndo={undoEdit}
+          onRedo={redoEdit}
           fullPaletteColors={fullPaletteColors}
           showFullPalette={showFullPalette}
           onToggleFullPalette={handleToggleFullPalette}
