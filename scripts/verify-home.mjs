@@ -209,6 +209,36 @@ try {
   await desktop.screenshot({ path: path.join(output, 'desktop-after-upload.png'), fullPage: true, animations: 'disabled' });
   console.log('upload / crop / canvas preview / download button OK');
 
+  // Mock the archive API (zero real Blob quota). Save must serialize the
+  // current visible bead grid, not the previously uploaded source image.
+  let postedCsv = '';
+  let archiveSaveCalls = 0;
+  await desktop.route('**/api/archive*', async route => {
+    const req = route.request();
+    assert.equal(req.method(), 'POST');
+    archiveSaveCalls++;
+    const body = req.postDataJSON();
+    assert.equal(typeof body.csv, 'string');
+    assert.ok(body.csv.startsWith('#') || body.csv.startsWith('TRANSPARENT'));
+    postedCsv = body.csv;
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      headers: { 'Cache-Control': 'no-store' }, body: JSON.stringify({ code: '059864' }) });
+  });
+  const desktopActions = desktop.locator('.studio-edit-actions > button');
+  assert.equal(await desktopActions.count(), 3, 'desktop should have exactly three editor buttons');
+  const actionY = await desktopActions.evaluateAll(items => items.map(el => el.getBoundingClientRect().y));
+  assert.ok(actionY.every(y => Math.abs(y - actionY[0]) < 2), 'desktop actions must be side by side');
+  await desktop.getByRole('button', { name: '生成对接码' }).click();
+  const archiveModal = desktop.getByRole('dialog', { name: '已生成对接码' });
+  await archiveModal.waitFor({ timeout: 15000 });
+  await archiveModal.getByText('059864', { exact: true }).waitFor();
+  assert.equal(archiveSaveCalls, 1);
+  assert.ok(postedCsv.length > 20, 'saved CSV should contain real grid data');
+  await desktop.screenshot({ path: path.join(output, 'desktop-cloud-code.png'), animations: 'disabled' });
+  await archiveModal.getByRole('button', { name: '知道了' }).click();
+  console.log('PASS: latest-grid archive save & 6-digit modal');
+
+
   // Mock paid SiliconFlow provider: no real account or charges during CI.
   await desktop.getByRole('button', { name: '取消' }).last().click();
   const fakeGeneratedImage = await readFile('public/icon-192x192.png');
