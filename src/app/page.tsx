@@ -2102,7 +2102,7 @@ export default function Home() {
               <label htmlFor="archive-code" className="sr-only">六位数字对接码</label>
               <input
                 id="archive-code" type="text" inputMode="numeric" pattern="[0-9]{6}"
-                autoComplete="off" maxLength={6} placeholder="请输入 6 位数字"
+                autoComplete="off" placeholder="请输入 6 位数字"
                 value={archiveCodeInput}
                 onChange={(event) => {
                   setArchiveCodeInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6));
