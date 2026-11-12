@@ -21,7 +21,7 @@ import {
 // 导入新的类型和组件
 import { GridDownloadOptions } from '../types/downloadTypes';
 import DownloadSettingsModal, { gridLineColorOptions } from '../components/DownloadSettingsModal';
-import { downloadImage, importCsvData } from '../utils/imageDownloader';
+import { downloadImage, importCsvData, serializeGridCsv } from '../utils/imageDownloader';
 
 import { 
   colorSystemOptions, 
@@ -100,6 +100,7 @@ import DonationModal from '../components/DonationModal';
 import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 import ImageCropperModal from '../components/ImageCropperModal';
 import AIOptimizeModal from '../components/AIOptimizeModal';
+import ArchiveCodeModal from '../components/ArchiveCodeModal';
 
 export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
@@ -198,6 +199,13 @@ export default function Home() {
 
   // 新增：AI优化弹窗状态
   const [isAIOptimizeOpen, setIsAIOptimizeOpen] = useState<boolean>(false);
+  const [archiveCodeInput, setArchiveCodeInput] = useState('');
+  const [isLoadingArchive, setIsLoadingArchive] = useState(false);
+  const [archiveImportError, setArchiveImportError] = useState<string | null>(null);
+  const [isSavingArchive, setIsSavingArchive] = useState(false);
+  const [archiveSaveError, setArchiveSaveError] = useState<string | null>(null);
+  const [savedArchiveCode, setSavedArchiveCode] = useState<string | null>(null);
+  const skipImportedCsvRemapRef = useRef(false);
 
   // 放大镜切换处理函数
   const handleToggleMagnifier = () => {
@@ -555,6 +563,34 @@ export default function Home() {
     return canvas.toDataURL('image/png');
   };
 
+  // Exact CSV import, shared by uploaded CSV files and six-digit cloud codes.
+  const applyImportedCsvData = (grid: MappedPixel[][], dimensions: { N: number; M: number }) => {
+    skipImportedCsvRemapRef.current = true;
+    setExcludedColorKeys(new Set());
+    setMappedPixelData(grid);
+    setGridDimensions(dimensions);
+    const counts: { [key: string]: { count: number; color: string } } = {};
+    let beads = 0;
+    for (const row of grid) {
+      for (const cell of row) {
+        if (!cell || cell.isExternal) continue;
+        const hex = cell.color.toUpperCase();
+        if (!counts[hex]) counts[hex] = { count: 0, color: hex };
+        counts[hex].count++;
+        beads++;
+      }
+    }
+    setColorCounts(counts);
+    setTotalBeadCount(beads);
+    setInitialGridColorKeys(new Set(Object.keys(counts)));
+    setOriginalImageSrc(generateSyntheticImageFromPixelData(grid, dimensions));
+    setIsManualColoringMode(false);
+    setSelectedColor(null);
+    setIsEraseMode(false);
+    setGranularity(dimensions.N);
+    setGranularityInput(dimensions.N.toString());
+  };
+
   const processFile = (file: File) => {
     // 检查文件类型
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
@@ -566,51 +602,8 @@ export default function Home() {
         .then(({ mappedPixelData, gridDimensions }) => {
           console.log(`成功导入CSV文件: ${gridDimensions.N}x${gridDimensions.M}`);
           
-          // 设置导入的数据
-          setMappedPixelData(mappedPixelData);
-          setGridDimensions(gridDimensions);
-          setOriginalImageSrc(null); // CSV导入时没有原始图片
-          
-          // 计算颜色统计
-          const colorCountsMap: { [key: string]: { count: number; color: string } } = {};
-          let totalCount = 0;
-          
-          mappedPixelData.forEach(row => {
-            row.forEach(cell => {
-              if (cell && !cell.isExternal) {
-                const colorKey = cell.color.toUpperCase();
-                if (colorCountsMap[colorKey]) {
-                  colorCountsMap[colorKey].count++;
-                } else {
-                  colorCountsMap[colorKey] = {
-                    count: 1,
-                    color: cell.color
-                  };
-                }
-                totalCount++;
-              }
-            });
-          });
-          
-          setColorCounts(colorCountsMap);
-          setTotalBeadCount(totalCount);
-          setInitialGridColorKeys(new Set(Object.keys(colorCountsMap)));
-          
-          // 根据mappedPixelData生成合成的originalImageSrc
-          const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
-          
-          setOriginalImageSrc(syntheticImageSrc);
-          
-          // 重置状态
-          setIsManualColoringMode(false);
-          setSelectedColor(null);
-          setIsEraseMode(false);
-          
-          // 设置格子数量为导入的尺寸，避免重新映射时尺寸被修改
-          setGranularity(gridDimensions.N);
-          setGranularityInput(gridDimensions.N.toString());
-          
-          alert(`成功导入CSV文件！图纸尺寸：${gridDimensions.N}x${gridDimensions.M}，共使用${Object.keys(colorCountsMap).length}种颜色。`);
+          applyImportedCsvData(mappedPixelData, gridDimensions);
+          alert(`成功导入CSV文件！图纸尺寸：${gridDimensions.N}x${gridDimensions.M}。`);
         })
         .catch(error => {
           console.error('CSV导入失败:', error);
@@ -632,6 +625,58 @@ export default function Home() {
           setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
       }
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveArchive = async () => {
+    if (!mappedPixelData || !gridDimensions || isSavingArchive) return;
+    setIsSavingArchive(true);
+    setArchiveSaveError(null);
+    try {
+      const csv = serializeGridCsv(mappedPixelData, gridDimensions);
+      if (new Blob([csv]).size > 3_000_000) {
+        throw new Error('图纸数据超过 3 MB，暂时无法保存到云端。');
+      }
+      const response = await fetch('/api/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv }),
+        cache: 'no-store'
+      });
+      const result = await response.json() as { code?: string; message?: string };
+      if (!response.ok || !result.code || !/^[0-9]{6}$/.test(result.code)) {
+        throw new Error(result.message || '云端保存失败，请稍后再试。');
+      }
+      setSavedArchiveCode(result.code);
+    } catch (error) {
+      setArchiveSaveError(error instanceof Error ? error.message : '云端保存失败，请检查网络。');
+    } finally {
+      setIsSavingArchive(false);
+    }
+  };
+
+  const handleLoadArchive = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!/^[0-9]{6}$/.test(archiveCodeInput) || isLoadingArchive) return;
+    setIsLoadingArchive(true);
+    setArchiveImportError(null);
+    try {
+      const response = await fetch(`/api/archive?code=${encodeURIComponent(archiveCodeInput)}`, {
+        method: 'GET', cache: 'no-store'
+      });
+      if (!response.ok) {
+        const result = await response.json() as { message?: string };
+        throw new Error(result.message || '找不到这个对接码对应的图纸。');
+      }
+      const csv = await response.text();
+      const file = new File([csv], `pindou-${archiveCodeInput}.csv`, { type: 'text/csv' });
+      const imported = await importCsvData(file);
+      applyImportedCsvData(imported.mappedPixelData, imported.gridDimensions);
+      setArchiveCodeInput('');
+    } catch (error) {
+      setArchiveImportError(error instanceof Error ? error.message : '导入失败，请稍后重试。');
+    } finally {
+      setIsLoadingArchive(false);
     }
   };
 
@@ -1031,6 +1076,10 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (skipImportedCsvRemapRef.current) {
+      skipImportedCsvRemapRef.current = false;
+      return;
+    }
     if (originalImageSrc && activeBeadPalette.length > 0) {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
