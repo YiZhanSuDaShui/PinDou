@@ -46,6 +46,28 @@ function sortColorKeys(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+/** Serialize the exact latest editable grid, including erasures, to our CSV format. */
+export function serializeGridCsv(
+  mappedPixelData: MappedPixel[][],
+  gridDimensions: { N: number; M: number }
+): string {
+  const { N, M } = gridDimensions;
+  if (N <= 0 || M <= 0 || mappedPixelData.length !== M ||
+      mappedPixelData.some(row => row.length !== N)) {
+    throw new Error('图纸网格数据不完整，无法生成对接码。');
+  }
+  const lines: string[] = [];
+  for (let row = 0; row < M; row++) {
+    const values: string[] = [];
+    for (let col = 0; col < N; col++) {
+      const cell = mappedPixelData[row][col];
+      values.push(cell && !cell.isExternal ? cell.color : 'TRANSPARENT');
+    }
+    lines.push(values.join(','));
+  }
+  return lines.join('\n');
+}
+
 // 导出CSV hex数据的函数
 export function exportCsvData({
   mappedPixelData,
@@ -63,28 +85,9 @@ export function exportCsvData({
   }
 
   const { N, M } = gridDimensions;
-  
-  // 生成CSV内容，每行代表图纸的一行
-  const csvLines: string[] = [];
-  
-  for (let row = 0; row < M; row++) {
-    const rowData: string[] = [];
-    for (let col = 0; col < N; col++) {
-      const cellData = mappedPixelData[row][col];
-      if (cellData && !cellData.isExternal) {
-        // 内部单元格，记录hex颜色值
-        rowData.push(cellData.color);
-      } else {
-        // 外部单元格或空白，使用特殊标记
-        rowData.push('TRANSPARENT');
-      }
-    }
-    csvLines.push(rowData.join(','));
-  }
+  // Keep downloaded CSV and cloud-saved CSV byte-for-byte identical.
+  const csvContent = serializeGridCsv(mappedPixelData, gridDimensions);
 
-  // 创建CSV内容
-  const csvContent = csvLines.join('\n');
-  
   // 创建并下载CSV文件
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');

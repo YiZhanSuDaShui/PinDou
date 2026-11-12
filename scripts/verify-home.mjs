@@ -23,6 +23,28 @@ async function runCase(label, viewport) {
   assert.match(await page.locator('footer').innerText(), /XinXinXin拼豆底稿生成器/);
   assert.equal(await page.getByRole('button', { name: '请作者喝一杯奶茶' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '帮助教程' }).count(), 0);
+  // Home restore module must be between the upload panel and the creative tip.
+  const archiveModule = page.locator('.studio-archive-import');
+  await archiveModule.waitFor();
+  const codeInput = page.getByRole('textbox', { name: '六位数字对接码' });
+  const confirmCode = archiveModule.getByRole('button', { name: '确认', exact: true });
+  assert.equal(await confirmCode.isDisabled(), true);
+  await codeInput.fill('12');
+  assert.equal(await confirmCode.isDisabled(), true);
+  await codeInput.fill('05a98b64');
+  assert.equal(await codeInput.inputValue(), '059864', 'leading zeroes must survive');
+  assert.equal(await confirmCode.isEnabled(), true);
+  await codeInput.fill('');
+  const positions = await page.evaluate(() => {
+    const upload = document.querySelector('.studio-upload-shell').getBoundingClientRect();
+    const archive = document.querySelector('.studio-archive-import').getBoundingClientRect();
+    const tip = document.querySelector('.studio-note').getBoundingClientRect();
+    return { uploadBottom: upload.bottom, archiveTop: archive.top, archiveBottom: archive.bottom, tipTop: tip.top };
+  });
+  assert.ok(positions.uploadBottom < positions.archiveTop && positions.archiveBottom < positions.tipTop,
+    label + ': archive module should sit between the upload panel and tip');
+  console.log('PASS: six-digit import UI and landing position ' + label);
+
   // A visible, restrained install pill belongs inside the header rather than
   // floating in the lower-right corner.
   const installButton = page.getByRole('button', { name: '安装应用' });
@@ -126,6 +148,17 @@ async function runCase(label, viewport) {
 try {
   const desktop = await runCase('desktop-1440', { width: 1440, height: 900 });
   const mobile = await runCase('mobile-390', { width: 390, height: 844 });
+  await mobile.locator('input[type="file"][accept*="image/png"]').setInputFiles('public/icon-192x192.png');
+  await mobile.getByRole('heading', { name: '裁剪图片' }).waitFor({ timeout: 20000 });
+  await mobile.waitForTimeout(400);
+  await mobile.getByRole('button', { name: '确认裁剪' }).click();
+  await mobile.locator('.studio-edit-actions').waitFor({ timeout: 20000 });
+  const mobileButtons = await mobile.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => { const rect = item.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width }; })
+  );
+  assert.equal(mobileButtons.length, 3, 'mobile should show three editor actions');
+  assert.ok(mobileButtons.every(item => Math.abs(item.y - mobileButtons[0].y) < 2), 'mobile actions must be side-by-side');
+  await mobile.screenshot({ path: path.join(output, 'mobile-three-actions.png'), animations: 'disabled' });
   await mobile.close();
 
   // Actual file upload -> crop -> pixel preview -> download dialog.
@@ -175,9 +208,41 @@ try {
   await desktop.getByRole('button', { name: '下载拼豆图纸' }).click();
   await desktop.screenshot({ path: path.join(output, 'desktop-after-upload.png'), fullPage: true, animations: 'disabled' });
   console.log('upload / crop / canvas preview / download button OK');
+  // Close download settings before clicking cloud archive actions.
+  await desktop.getByRole('heading', { name: '下载图纸设置' }).waitFor();
+  await desktop.getByRole('button', { name: '取消' }).last().click();
+
+  // Mock the archive API (zero real Blob quota). Save must serialize the
+  // current visible bead grid, not the previously uploaded source image.
+  let postedCsv = '';
+  let archiveSaveCalls = 0;
+  await desktop.route('**/api/archive*', async route => {
+    const req = route.request();
+    assert.equal(req.method(), 'POST');
+    archiveSaveCalls++;
+    const body = req.postDataJSON();
+    assert.equal(typeof body.csv, 'string');
+    assert.ok(body.csv.startsWith('#') || body.csv.startsWith('TRANSPARENT'));
+    postedCsv = body.csv;
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      headers: { 'Cache-Control': 'no-store' }, body: JSON.stringify({ code: '059864' }) });
+  });
+  const desktopActions = desktop.locator('.studio-edit-actions > button');
+  assert.equal(await desktopActions.count(), 3, 'desktop should have exactly three editor buttons');
+  const actionY = await desktopActions.evaluateAll(items => items.map(el => el.getBoundingClientRect().y));
+  assert.ok(actionY.every(y => Math.abs(y - actionY[0]) < 2), 'desktop actions must be side by side');
+  await desktop.getByRole('button', { name: '生成对接码' }).click();
+  const archiveModal = desktop.getByRole('dialog', { name: '已生成对接码' });
+  await archiveModal.waitFor({ timeout: 15000 });
+  await archiveModal.getByText('059864', { exact: true }).waitFor();
+  assert.equal(archiveSaveCalls, 1);
+  assert.ok(postedCsv.length > 20, 'saved CSV should contain real grid data');
+  await desktop.screenshot({ path: path.join(output, 'desktop-cloud-code.png'), animations: 'disabled' });
+  await archiveModal.getByRole('button', { name: '知道了' }).click();
+  console.log('PASS: latest-grid archive save & 6-digit modal');
+
 
   // Mock paid SiliconFlow provider: no real account or charges during CI.
-  await desktop.getByRole('button', { name: '取消' }).last().click();
   const fakeGeneratedImage = await readFile('public/icon-192x192.png');
   let editApiCalls = 0;
   let lastAiPrompt = '';
@@ -384,6 +449,41 @@ try {
     'old brand or QR placeholder painted in export: ' + JSON.stringify(trace));
   assert.ok(!trace.images.some(value => value.includes('website_qrcode')), 'old QR embedded in export');
   console.log('PASS: actual PNG export uses pink header + portrait logo with no old branding or QR');
+
+  // New browser session: enter the leading-zero code, fetch the CSV and
+  // restore it through the existing import parser. A second save must return
+  // the exact same CSV, including TRANSPARENT cells, without re-pixelation.
+  const restorePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  restorePage.on('pageerror', error => pageErrors.push('archive restore: ' + error.message));
+  let loadedCodes = 0;
+  let resaved = false;
+  await restorePage.route('**/api/archive*', async route => {
+    const req = route.request();
+    if (req.method() === 'GET') {
+      assert.equal(new URL(req.url()).searchParams.get('code'), '059864');
+      loadedCodes++;
+      await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', body: postedCsv });
+    } else {
+      const body = req.postDataJSON();
+      assert.equal(body.csv, postedCsv, 'a restored CSV must survive save without losing any cells');
+      resaved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: '123456' }) });
+    }
+  });
+  await restorePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await restorePage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await restorePage.getByRole('textbox', { name: '六位数字对接码' }).fill('059864');
+  await restorePage.locator('.studio-archive-import').getByRole('button', { name: '确认', exact: true }).click();
+  await restorePage.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+  await restorePage.waitForTimeout(450);
+  await restorePage.getByRole('button', { name: '生成对接码' }).click();
+  await restorePage.getByRole('dialog', { name: '已生成对接码' }).getByText('123456').waitFor();
+  assert.equal(loadedCodes, 1);
+  assert.equal(resaved, true);
+  await restorePage.screenshot({ path: path.join(output, 'desktop-csv-restored.png'), animations: 'disabled' });
+  await restorePage.close();
+  console.log('PASS: cloud six-digit code restores the exact source CSV without remapping');
+
   await desktop.close();
 
   assert.deepEqual(pageErrors, [], 'Browser JavaScript errors: ' + pageErrors.join(' | '));
