@@ -611,6 +611,149 @@ try {
   await filePage.close();
   console.log('PASS: portrait CSV code/file imports preserve aspect ratio, square cells and exact grid');
 
+
+  // Golden beam regression: target colors are deliberately confined to far
+  // left and far right. The right-hand color must light up promptly without
+  // waiting for a beam to cross empty image columns.
+  const flowCols = 40;
+  const flowRows = 12;
+  const flowCsv = Array.from({ length: flowRows }, (_, y) =>
+    Array.from({ length: flowCols }, (_, x) => {
+      if (y >= 2 && y <= 9 && x >= 4 && x <= 10) return '#B85F86';
+      if (y >= 2 && y <= 9 && x >= 29 && x <= 35) return '#2C5B89';
+      return 'TRANSPARENT';
+    }).join(',')
+  ).join('\n');
+
+  const goldPage = await browser.newPage({ viewport: { width: 1250, height: 800 } });
+  goldPage.on('pageerror', e => pageErrors.push('gold preview: ' + e.message));
+  await goldPage.route('**/api/archive*', async route => {
+    assert.equal(route.request().method(), 'GET', 'gold tests should never save to cloud');
+    await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', body: flowCsv });
+  });
+  await goldPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await goldPage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await goldPage.getByRole('textbox', { name: '六位数字对接码' }).fill('090808');
+  await goldPage.locator('.studio-archive-import').getByRole('button', { name: '确认', exact: true }).click();
+  await goldPage.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+
+  const leftRow = goldPage.locator('.studio-noise-row[data-color-hex="#B85F86"]');
+  const rightRow = goldPage.locator('.studio-noise-row[data-color-hex="#2C5B89"]');
+  assert.equal(await leftRow.count(), 1);
+  assert.equal(await rightRow.count(), 1);
+  const gridBefore = await goldPage.locator('.studio-preview-stage canvas').first()
+    .evaluate(canvas => canvas.toDataURL());
+  const sampleSweep = () => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    if (!layer || !layer.width || !layer.height) return { left: 0, right: 0 };
+    const ctx = layer.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return { left: 0, right: 0 };
+    const data = ctx.getImageData(0, 0, layer.width, layer.height).data;
+    const count = (colStart, colEnd) => {
+      let total = 0;
+      for (let col = colStart; col <= colEnd; col++) {
+        for (let row = 3; row <= 8; row++) {
+          const x = Math.floor((col + .5) * layer.width / 40);
+          const y = Math.floor((row + .5) * layer.height / 12);
+          if (data[(y * layer.width + x) * 4 + 3] >= 22) total++;
+        }
+      }
+      return total;
+    };
+    return { left: count(4, 10), right: count(29, 35) };
+  };
+
+
+  const sampleSweepCondition = () => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    if (!layer || !layer.width || !layer.height) return false;
+    const ctx = layer.getContext('2d', { willReadFrequently: true });
+    const data = ctx.getImageData(0, 0, layer.width, layer.height).data;
+    for (let col = 4; col <= 10; col++) for (let row = 3; row <= 8; row++) {
+      const x = Math.floor((col + .5) * layer.width / 40);
+      const y = Math.floor((row + .5) * layer.height / 12);
+      if (data[(y * layer.width + x) * 4 + 3] >= 22) return true;
+    }
+    return false;
+  };
+  const sampleRightGoldAndNoLeft = () => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    if (!layer || !layer.width || !layer.height) return false;
+    const ctx = layer.getContext('2d', { willReadFrequently: true });
+    const data = ctx.getImageData(0, 0, layer.width, layer.height).data;
+    const hasGold = (from, to) => {
+      for (let col = from; col <= to; col++) for (let row = 3; row <= 8; row++) {
+        const x = Math.floor((col + .5) * layer.width / 40);
+        const y = Math.floor((row + .5) * layer.height / 12);
+        if (data[(y * layer.width + x) * 4 + 3] >= 22) return true;
+      }
+      return false;
+    };
+    return hasGold(29, 35) && !hasGold(4, 10);
+  };
+
+  await leftRow.hover();
+  await goldPage.waitForFunction(sampleSweepCondition, null, { timeout: 2000 }).catch(async () => {
+    throw new Error('A color never displayed a golden sweep: ' + JSON.stringify(await goldPage.evaluate(sampleSweep)));
+  });
+  const firstGold = await goldPage.evaluate(sampleSweep);
+  assert.ok(firstGold.left > 0 && firstGold.right === 0,
+    'left color must light up without touching right color: ' + JSON.stringify(firstGold));
+
+  // A -> B during the active sweep: old light fades within ~160ms while B
+  // starts near its own leftmost bead, despite being at the far image right.
+  await rightRow.hover();
+  await goldPage.waitForFunction(sampleRightGoldAndNoLeft, null, { timeout: 1800 });
+  const switched = await goldPage.evaluate(sampleSweep);
+  assert.ok(switched.right > 0 && switched.left === 0,
+    'new color must replace old glow promptly: ' + JSON.stringify(switched));
+
+  // The mobile-safe eye button is independent of the delete action.
+  const countBeforeEye = await rightRow.locator('.studio-noise-count').innerText();
+  await rightRow.getByRole('button', { name: /预览.*颜色的位置/ }).click();
+  assert.equal(await rightRow.locator('.studio-noise-count').innerText(), countBeforeEye);
+  assert.equal(await rightRow.count(), 1);
+  const gridAfterEye = await goldPage.locator('.studio-preview-stage canvas').first()
+    .evaluate(canvas => canvas.toDataURL());
+  assert.equal(gridAfterEye, gridBefore, 'glow preview must never modify the bead canvas');
+
+  // A manual palette click should play the exact same animation (and still
+  // select the chosen paint color). The actual grid remains unchanged.
+  await goldPage.getByRole('button', { name: '进入手动编辑模式' }).click();
+  await goldPage.locator('button[title*="#B85F86"]').click();
+  await goldPage.waitForFunction(sampleSweepCondition, null, { timeout: 2000 });
+  assert.equal(
+    await goldPage.locator('.studio-preview-stage canvas').first().evaluate(c => c.toDataURL()),
+    gridBefore, 'manual palette selection should not paint until the canvas is clicked'
+  );
+  await goldPage.screenshot({ path: path.join(output, 'golden-flow-manual.png'), animations: 'disabled' });
+  await goldPage.close();
+  console.log('PASS: left-to-right gold sweep, A/B interruption, preview-only eye, manual palette');
+
+  // A touch viewport can preview without long-press, and without invoking
+  // the destructive row action.
+  const eyePage = await browser.newPage({
+    viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true
+  });
+  eyePage.on('pageerror', e => pageErrors.push('touch eye preview: ' + e.message));
+  await eyePage.route('**/api/archive*', async route => {
+    await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', body: flowCsv });
+  });
+  await eyePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await eyePage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await eyePage.getByRole('textbox', { name: '六位数字对接码' }).fill('090808');
+  await eyePage.locator('.studio-archive-import').getByRole('button', { name: '确认', exact: true }).click();
+  await eyePage.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+  const touchRow = eyePage.locator('.studio-noise-row[data-color-hex="#B85F86"]');
+  const beforeTouchCount = await touchRow.locator('.studio-noise-count').innerText();
+  const eyeButton = touchRow.getByRole('button', { name: /预览.*颜色的位置/ });
+  assert.ok(await eyeButton.isVisible(), 'eye preview must be visible on touch screens');
+  await eyeButton.tap();
+  assert.equal(await touchRow.locator('.studio-noise-count').innerText(), beforeTouchCount);
+  assert.equal(await touchRow.count(), 1, 'eye tap must not delete a color');
+  await eyePage.close();
+  console.log('PASS: touch eye preview does not remove colors');
+
   await desktop.close();
 
   assert.deepEqual(pageErrors, [], 'Browser JavaScript errors: ' + pageErrors.join(' | '));
