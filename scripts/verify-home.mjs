@@ -447,6 +447,41 @@ try {
     'old brand or QR placeholder painted in export: ' + JSON.stringify(trace));
   assert.ok(!trace.images.some(value => value.includes('website_qrcode')), 'old QR embedded in export');
   console.log('PASS: actual PNG export uses pink header + portrait logo with no old branding or QR');
+
+  // New browser session: enter the leading-zero code, fetch the CSV and
+  // restore it through the existing import parser. A second save must return
+  // the exact same CSV, including TRANSPARENT cells, without re-pixelation.
+  const restorePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  restorePage.on('pageerror', error => pageErrors.push('archive restore: ' + error.message));
+  let loadedCodes = 0;
+  let resaved = false;
+  await restorePage.route('**/api/archive*', async route => {
+    const req = route.request();
+    if (req.method() === 'GET') {
+      assert.equal(new URL(req.url()).searchParams.get('code'), '059864');
+      loadedCodes++;
+      await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', body: postedCsv });
+    } else {
+      const body = req.postDataJSON();
+      assert.equal(body.csv, postedCsv, 'a restored CSV must survive save without losing any cells');
+      resaved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: '123456' }) });
+    }
+  });
+  await restorePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await restorePage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await restorePage.getByRole('textbox', { name: '六位数字对接码' }).fill('059864');
+  await restorePage.locator('.studio-archive-import').getByRole('button', { name: '确认', exact: true }).click();
+  await restorePage.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+  await restorePage.waitForTimeout(450);
+  await restorePage.getByRole('button', { name: '生成对接码' }).click();
+  await restorePage.getByRole('dialog', { name: '已生成对接码' }).getByText('123456').waitFor();
+  assert.equal(loadedCodes, 1);
+  assert.equal(resaved, true);
+  await restorePage.screenshot({ path: path.join(output, 'desktop-csv-restored.png'), animations: 'disabled' });
+  await restorePage.close();
+  console.log('PASS: cloud six-digit code restores the exact source CSV without remapping');
+
   await desktop.close();
 
   assert.deepEqual(pageErrors, [], 'Browser JavaScript errors: ' + pageErrors.join(' | '));
