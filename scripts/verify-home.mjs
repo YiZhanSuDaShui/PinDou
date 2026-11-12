@@ -484,6 +484,89 @@ try {
   await restorePage.close();
   console.log('PASS: cloud six-digit code restores the exact source CSV without remapping');
 
+
+  // Regression: previously a portrait CSV was drawn onto HTML canvas's default
+  // 300x150 bitmap, turning a tall person into a wide/squashed figure. The
+  // stored 36x84 grid must keep square beads when restored by code or local CSV.
+  const portraitColumns = 36;
+  const portraitRows = 84;
+  const portraitCsv = Array.from({ length: portraitRows }, (_, row) =>
+    Array.from({ length: portraitColumns }, (_, col) => {
+      if (col < 3 || col > 32 || row < 3 || row > 80) return 'TRANSPARENT';
+      return (row + col) % 11 === 0 ? '#B85F86' : '#FFF0F5';
+    }).join(',')
+  ).join('\\n');
+
+  const checkPortraitCanvas = async (page, label) => {
+    await page.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('.studio-preview-stage canvas');
+      return canvas && canvas.height > canvas.width * 2;
+    }, { timeout: 15000 });
+    const metrics = await page.locator('.studio-preview-stage canvas').evaluate(canvas => {
+      const box = canvas.getBoundingClientRect();
+      return {
+        width: canvas.width, height: canvas.height,
+        cssWidth: box.width, cssHeight: box.height
+      };
+    });
+    const gridRatio = portraitColumns / portraitRows;
+    assert.ok(Math.abs(metrics.width / metrics.height - gridRatio) < .01,
+      label + ': intrinsic canvas ratio must match portrait grid ' + JSON.stringify(metrics));
+    assert.ok(Math.abs(metrics.cssWidth / metrics.cssHeight - gridRatio) < .02,
+      label + ': displayed canvas ratio must preserve portrait image ' + JSON.stringify(metrics));
+    assert.ok(Math.abs((metrics.width / portraitColumns) / (metrics.height / portraitRows) - 1) < .01,
+      label + ': rendered beads must have approximately square cells');
+    await page.screenshot({
+      path: path.join(output, label + '-portrait-csv.png'),
+      animations: 'disabled'
+    });
+    return metrics;
+  };
+
+  const portraitPage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  portraitPage.on('pageerror', error => pageErrors.push('portrait code restore: ' + error.message));
+  let portraitResaved = false;
+  await portraitPage.route('**/api/archive*', async route => {
+    if (route.request().method() === 'GET') {
+      assert.equal(new URL(route.request().url()).searchParams.get('code'), '002718');
+      await route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8',
+        body: portraitCsv });
+    } else {
+      const body = route.request().postDataJSON();
+      assert.equal(body.csv, portraitCsv,
+        'portrait cloud restore must preserve cell order and transparent markers');
+      portraitResaved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: '001009' }) });
+    }
+  });
+  await portraitPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await portraitPage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  await portraitPage.getByRole('textbox', { name: '六位数字对接码' }).fill('002718');
+  await portraitPage.locator('.studio-archive-import')
+    .getByRole('button', { name: '确认', exact: true }).click();
+  const codeMetrics = await checkPortraitCanvas(portraitPage, 'code-restored');
+  await portraitPage.getByRole('button', { name: '生成对接码' }).click();
+  await portraitPage.getByRole('dialog', { name: '已生成对接码' })
+    .getByText('001009').waitFor();
+  assert.equal(portraitResaved, true);
+  await portraitPage.close();
+
+  const filePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  filePage.on('pageerror', error => pageErrors.push('portrait CSV file import: ' + error.message));
+  await filePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await filePage.locator('.studio-dropzone[aria-disabled="false"]').waitFor();
+  filePage.on('dialog', dialog => dialog.accept());
+  await filePage.locator('input[type="file"][accept*="image/png"]').setInputFiles({
+    name: 'portrait-grid.csv', mimeType: 'text/csv', buffer: Buffer.from(portraitCsv)
+  });
+  const fileMetrics = await checkPortraitCanvas(filePage, 'file-restored');
+  assert.equal(fileMetrics.width, codeMetrics.width);
+  assert.equal(fileMetrics.height, codeMetrics.height);
+  await filePage.close();
+  console.log('PASS: portrait CSV code/file imports preserve aspect ratio, square cells and exact grid');
+
   await desktop.close();
 
   assert.deepEqual(pageErrors, [], 'Browser JavaScript errors: ' + pageErrors.join(' | '));
