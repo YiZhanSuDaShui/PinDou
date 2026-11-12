@@ -8,6 +8,10 @@ interface PixelatedPreviewCanvasProps {
   mappedPixelData: MappedPixel[][] | null;
   gridDimensions: { N: number; M: number } | null;
   isManualColoringMode: boolean;
+  isContinuousBrush?: boolean;
+  onBrushStart?: (clientX: number, clientY: number) => void;
+  onBrushMove?: (clientX: number, clientY: number) => void;
+  onBrushEnd?: () => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   onInteraction: (
     clientX: number,
@@ -104,6 +108,10 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   mappedPixelData,
   gridDimensions,
   isManualColoringMode,
+  isContinuousBrush = false,
+  onBrushStart,
+  onBrushMove,
+  onBrushEnd,
   canvasRef,
   onInteraction,
   highlightRequest,
@@ -112,6 +120,22 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const [darkModeState, setDarkModeState] = useState<boolean | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
+  const brushPointerRef = useRef<number | null>(null);
+  const [brushPreview, setBrushPreview] = useState<{ row: number; col: number } | null>(null);
+  const updateBrushPreview = (clientX: number, clientY: number) => {
+    if (!isContinuousBrush || !gridDimensions || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    if (clientX < rect.left || clientX >= rect.right || clientY < rect.top || clientY >= rect.bottom) {
+      setBrushPreview(null);
+      return;
+    }
+    const col = Math.floor((clientX - rect.left) / rect.width * gridDimensions.N);
+    const row = Math.floor((clientY - rect.top) / rect.height * gridDimensions.M);
+    setBrushPreview({
+      col: Math.max(0, Math.min(col, Math.max(0, gridDimensions.N - 2))),
+      row: Math.max(0, Math.min(row, Math.max(0, gridDimensions.M - 2)))
+    });
+  };
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -153,6 +177,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 鼠标移动时显示提示
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (isContinuousBrush) { updateBrushPreview(event.clientX, event.clientY); return; }
     // 只有在非手动模式下才通过mousemove显示tooltip，避免干扰手动上色
     if (!isManualColoringMode) {
         onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, false);
@@ -161,6 +186,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   // 鼠标离开时隐藏提示
   const handleMouseLeave = () => {
+    setBrushPreview(null);
     // 鼠标离开时总是隐藏tooltip
     onInteraction(0, 0, 0, 0, false, true);
   };
@@ -170,12 +196,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     // 鼠标点击行为保持不变：
     // 手动模式下：上色
     // 非手动模式下：切换tooltip
+    if (isContinuousBrush) return;
     onInteraction(event.clientX, event.clientY, event.pageX, event.pageY, isManualColoringMode);
   };
 
   // --- 触摸事件处理 ---
   // 用于检测触摸移动的参考
   const handleTouchStart = (event: TouchEvent<HTMLCanvasElement>) => {
+    if (isContinuousBrush) return;
     const touch = event.touches[0];
     if (!touch) return;
 
@@ -197,6 +225,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 触摸移动时检测是否需要隐藏提示
   const handleTouchMove = (event: TouchEvent<HTMLCanvasElement>) => {
+    if (isContinuousBrush) return;
     const touch = event.touches[0];
     if (!touch || !touchStartPosRef.current) return;
     
@@ -214,6 +243,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   
   // 触摸结束时不再自动隐藏提示框
   const handleTouchEnd = () => {
+    if (isContinuousBrush) return;
     // 检查是否是手动模式，并且触摸没有移动（判定为点击）
     if (isManualColoringMode && !touchMovedRef.current && touchStartPosRef.current) {
       // 使用触摸开始时的坐标来执行上色操作
@@ -228,10 +258,42 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
     touchMovedRef.current = false;
   };
 
+  // Pointer Events unify mouse and touch, with capture keeping each stroke
+  // intact even if a finger briefly exits the canvas.
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isContinuousBrush || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault();
+    brushPointerRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateBrushPreview(event.clientX, event.clientY);
+    onBrushStart?.(event.clientX, event.clientY);
+  };
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isContinuousBrush) return;
+    updateBrushPreview(event.clientX, event.clientY);
+    if (brushPointerRef.current === event.pointerId) onBrushMove?.(event.clientX, event.clientY);
+  };
+  const handlePointerEnd = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (brushPointerRef.current !== event.pointerId) return;
+    brushPointerRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    onBrushEnd?.();
+  };
+  useEffect(() => {
+    if (!isContinuousBrush) setBrushPreview(null);
+  }, [isContinuousBrush]);
+
   return (
     <div className="relative inline-block max-w-full align-middle">
     <canvas
       ref={canvasRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onLostPointerCapture={handlePointerEnd}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
@@ -240,13 +302,24 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd} // 添加 onTouchCancel 以处理触摸中断的情况
       className={`border border-gray-300 dark:border-gray-600 max-w-full h-auto rounded block ${
-        isManualColoringMode ? 'cursor-pointer' : 'cursor-grab' // 改为 grab 光标提示可以拖动
+        isContinuousBrush ? 'cursor-crosshair' : (isManualColoringMode ? 'cursor-pointer' : 'cursor-grab') // 改为 grab 光标提示可以拖动
       }`}
       style={{
         imageRendering: 'pixelated',
-        // touchAction: 'none' // 移除此行以允许页面滚动和缩放
+        touchAction: isContinuousBrush ? 'none' : 'auto'
       }}
     />
+      {isContinuousBrush && brushPreview && gridDimensions && (
+        <div className="absolute pointer-events-none rounded-[2px] border-2 border-[#df4f91] bg-[#f7a6cb]/30 shadow-[0_0_0_1px_#ffffffc0,0_0_12px_#f36d9b75]"
+          aria-hidden="true"
+          style={{
+            left: `${brushPreview.col / gridDimensions.N * 100}%`,
+            top: `${brushPreview.row / gridDimensions.M * 100}%`,
+            width: `${Math.min(2, gridDimensions.N) / gridDimensions.N * 100}%`,
+            height: `${Math.min(2, gridDimensions.M) / gridDimensions.M * 100}%`
+          }}
+        />
+      )}
       <GoldenSweepOverlay
         sourceCanvasRef={canvasRef}
         mappedPixelData={mappedPixelData}
