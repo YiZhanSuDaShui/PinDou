@@ -811,6 +811,64 @@ try {
     gridBefore, 'manual palette selection should not paint until the canvas is clicked'
   );
   await goldPage.screenshot({ path: path.join(output, 'golden-flow-manual.png'), animations: 'disabled' });
+
+  // Reversible manual painting on the exact restored 40x12 grid.
+  const beadCanvas = goldPage.locator('.studio-preview-stage canvas').first();
+  const brushToggle = goldPage.getByRole('button', { name: '连续画笔' });
+  const undoButton = goldPage.getByRole('button', { name: '撤销', exact: true });
+  const redoButton = goldPage.getByRole('button', { name: '重做', exact: true });
+  assert.equal(await goldPage.getByText('橡皮擦', { exact: true }).count(), 0,
+    'single eraser button should no longer exist');
+  assert.equal(await undoButton.isDisabled(), true);
+  assert.equal(await redoButton.isDisabled(), true);
+  const paintedCell = async (col, row) => beadCanvas.evaluate((canvas, loc) => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    return Array.from(ctx.getImageData(
+      Math.floor((loc.col + .5) * canvas.width / 40),
+      Math.floor((loc.row + .5) * canvas.height / 12), 1, 1).data).slice(0, 3);
+  }, { col, row });
+  const pinkCell = await paintedCell(5, 4);
+  const blueCell = await paintedCell(32, 4);
+  const box = await beadCanvas.boundingBox();
+  assert.ok(box, 'paint canvas must be visible');
+  const gridPoint = (col, row) => ({
+    x: box.x + (col + .5) * box.width / 40,
+    y: box.y + (row + .5) * box.height / 12
+  });
+  await brushToggle.click();
+  assert.equal(await brushToggle.getAttribute('aria-pressed'), 'true');
+  await goldPage.mouse.move(gridPoint(5, 4).x, gridPoint(5, 4).y);
+  await goldPage.mouse.down();
+  await goldPage.mouse.move(gridPoint(9, 4).x, gridPoint(9, 4).y, { steps: 7 });
+  await goldPage.mouse.up();
+  assert.deepEqual(await paintedCell(5, 4), blueCell);
+  assert.deepEqual(await paintedCell(9, 5), blueCell, 'stroke must paint second row and intermediate cells');
+  assert.equal(await undoButton.isEnabled(), true);
+  await undoButton.click();
+  assert.deepEqual(await paintedCell(5, 4), pinkCell, 'one undo should restore entire continuous stroke');
+  assert.deepEqual(await paintedCell(9, 5), pinkCell);
+  await redoButton.click();
+  assert.deepEqual(await paintedCell(9, 5), blueCell, 'redo should restore entire stroke');
+  await undoButton.click();
+  await brushToggle.click();
+  assert.equal(await brushToggle.getAttribute('aria-pressed'), 'false');
+
+  // Six individual edits retain only the newest five. A fresh edit after undo
+  // must clear redo, while the oldest action remains in the picture.
+  for (let col = 4; col < 10; col++) {
+    const point = gridPoint(col, 4);
+    await goldPage.mouse.click(point.x, point.y);
+  }
+  assert.equal(await undoButton.isEnabled(), true);
+  assert.equal(await redoButton.isDisabled(), true);
+  for (let step = 0; step < 5; step++) await undoButton.click();
+  assert.equal(await undoButton.isDisabled(), true, 'history is limited to five completed actions');
+  assert.deepEqual(await paintedCell(4, 4), blueCell, 'sixth action evicts oldest undo');
+  assert.deepEqual(await paintedCell(9, 4), pinkCell, 'most recent action must be undone');
+  for (let step = 0; step < 5; step++) await redoButton.click();
+  assert.equal(await redoButton.isDisabled(), true);
+  assert.deepEqual(await paintedCell(9, 4), blueCell);
+  console.log('PASS: 2x2 pointer brush, single-stroke undo/redo, five-step cap and no eraser button');
   await goldPage.close();
   console.log('PASS: left-to-right sweep, gold 2s hold/fade, A/B interruption, eye isolate and manual palette');
 
