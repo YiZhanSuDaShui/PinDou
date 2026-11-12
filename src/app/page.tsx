@@ -93,7 +93,8 @@ import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
-import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
+import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
+import { applyHistoryEntry, buildHistoryEntry, paintBrushSegment, type EditHistoryEntry, type CellPosition, type PixelChange } from '../utils/manualEditHistory';
 
 // 1. 导入新的 DonationModal 组件
 import DonationModal from '../components/DonationModal';
@@ -132,6 +133,113 @@ export default function Home() {
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
+  const [isContinuousBrush, setIsContinuousBrush] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState({ undo: 0, redo: 0 });
+  const undoHistoryRef = useRef<EditHistoryEntry[]>([]);
+  const redoHistoryRef = useRef<EditHistoryEntry[]>([]);
+  const currentGridRef = useRef<MappedPixel[][] | null>(null);
+  const strokeRef = useRef<{ last: CellPosition; changes: Map<number, PixelChange>; color: MappedPixel } | null>(null);
+
+  const refreshHistoryStatus = () => setHistoryStatus({
+    undo: undoHistoryRef.current.length, redo: redoHistoryRef.current.length
+  });
+  const clearEditHistory = () => {
+    strokeRef.current = null;
+    undoHistoryRef.current = [];
+    redoHistoryRef.current = [];
+    refreshHistoryStatus();
+  };
+  const rememberEdit = (entry: EditHistoryEntry | null) => {
+    if (!entry) return;
+    undoHistoryRef.current.push(entry);
+    if (undoHistoryRef.current.length > 5) undoHistoryRef.current.shift();
+    redoHistoryRef.current = [];
+    refreshHistoryStatus();
+  };
+  const showEditedGrid = (grid: MappedPixel[][]) => {
+    currentGridRef.current = grid;
+    setMappedPixelData(grid);
+    const { colorCounts: counts, totalCount } = recalculateColorStats(grid);
+    setColorCounts(counts);
+    setTotalBeadCount(totalCount);
+  };
+  const commitGridEdit = (next: MappedPixel[][], before?: Set<string>, after?: Set<string>) => {
+    const previous = currentGridRef.current;
+    if (!previous) return;
+    const entry = buildHistoryEntry(previous, next, before, after);
+    if (!entry) return;
+    rememberEdit(entry);
+    showEditedGrid(next);
+  };
+  const replayEdit = (direction: 'undo' | 'redo') => {
+    if (strokeRef.current) return;
+    const source = direction === 'undo' ? undoHistoryRef.current : redoHistoryRef.current;
+    const destination = direction === 'undo' ? redoHistoryRef.current : undoHistoryRef.current;
+    const entry = source.pop();
+    const grid = currentGridRef.current;
+    if (!entry || !grid) return;
+    destination.push(entry);
+    showEditedGrid(applyHistoryEntry(grid, entry, direction));
+    const excluded = direction === 'undo' ? entry.excludedBefore : entry.excludedAfter;
+    if (excluded) setExcludedColorKeys(new Set(excluded));
+    const initial = direction === 'undo' ? entry.initialBefore : entry.initialAfter;
+    if (initial) setInitialGridColorKeys(new Set(initial));
+    setTooltipData(null);
+    refreshHistoryStatus();
+  };
+  const undoEdit = () => replayEdit('undo');
+  const redoEdit = () => replayEdit('redo');
+  const brushPositionFromClient = (clientX: number, clientY: number): CellPosition | null => {
+    const canvas = pixelatedCanvasRef.current;
+    if (!canvas || !gridDimensions) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height || clientX < rect.left || clientX >= rect.right ||
+      clientY < rect.top || clientY >= rect.bottom) return null;
+    return {
+      row: Math.floor((clientY - rect.top) / rect.height * gridDimensions.M),
+      col: Math.floor((clientX - rect.left) / rect.width * gridDimensions.N)
+    };
+  };
+  const drawBrushTo = (point: CellPosition) => {
+    const stroke = strokeRef.current;
+    const grid = currentGridRef.current;
+    if (!stroke || !grid) return;
+    const next = paintBrushSegment(grid, stroke.last, point, stroke.color, stroke.changes);
+    stroke.last = point;
+    if (next !== grid) showEditedGrid(next);
+  };
+  const startBrush = (clientX: number, clientY: number) => {
+    if (!isManualColoringMode || !isContinuousBrush || isEraseMode ||
+      colorReplaceState.isActive || !selectedColor || selectedColor.key === TRANSPARENT_KEY) return;
+    const point = brushPositionFromClient(clientX, clientY);
+    if (!point) return;
+    strokeRef.current = { last: point, changes: new Map(), color: { ...selectedColor, isExternal: false } };
+    drawBrushTo(point);
+  };
+  const moveBrush = (clientX: number, clientY: number) => {
+    const point = brushPositionFromClient(clientX, clientY);
+    if (strokeRef.current && point) drawBrushTo(point);
+  };
+  const finishBrush = () => {
+    const stroke = strokeRef.current;
+    strokeRef.current = null;
+    if (stroke && stroke.changes.size) rememberEdit({ changes: Array.from(stroke.changes.values()) });
+  };
+  useEffect(() => { currentGridRef.current = mappedPixelData; }, [mappedPixelData]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isManualColoringMode || !(event.ctrlKey || event.metaKey) || event.altKey ||
+        event.key.toLowerCase() !== 'z') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      event.preventDefault();
+      if (event.shiftKey) redoEdit();
+      else undoEdit();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   // 新增：一键擦除模式状态
   const [isEraseMode, setIsEraseMode] = useState<boolean>(false);
   // 新增状态变量：控制打赏弹窗
@@ -235,52 +343,11 @@ export default function Home() {
 
   // 放大镜像素编辑处理函数
   const handleMagnifierPixelEdit = (row: number, col: number, colorData: { key: string; color: string }) => {
-    if (!mappedPixelData) return;
-    
-    // 创建新的像素数据
-    const newMappedPixelData = mappedPixelData.map((rowData, r) =>
-      rowData.map((pixel, c) => {
-        if (r === row && c === col) {
-          return { 
-            key: colorData.key, 
-            color: colorData.color 
-          } as MappedPixel;
-        }
-        return pixel;
-      })
-    );
-    
-    setMappedPixelData(newMappedPixelData);
-    
-    // 更新颜色统计
-    if (colorCounts) {
-      const newColorCounts = { ...colorCounts };
-      
-      // 减少原颜色的计数
-      const oldPixel = mappedPixelData[row][col];
-      if (newColorCounts[oldPixel.key]) {
-        newColorCounts[oldPixel.key].count--;
-        if (newColorCounts[oldPixel.key].count === 0) {
-          delete newColorCounts[oldPixel.key];
-        }
-      }
-      
-      // 增加新颜色的计数
-      if (newColorCounts[colorData.key]) {
-        newColorCounts[colorData.key].count++;
-      } else {
-        newColorCounts[colorData.key] = {
-          count: 1,
-          color: colorData.color
-        };
-      }
-      
-      setColorCounts(newColorCounts);
-      
-      // 更新总计数
-      const newTotal = Object.values(newColorCounts).reduce((sum, item) => sum + item.count, 0);
-      setTotalBeadCount(newTotal);
-    }
+    const grid = currentGridRef.current;
+    if (!grid?.[row]?.[col]) return;
+    const next = grid.map(line => line.slice());
+    next[row][col] = { key: colorData.key, color: colorData.color, isExternal: false };
+    commitGridEdit(next);
   };
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -573,6 +640,8 @@ export default function Home() {
   const applyImportedCsvData = (grid: MappedPixel[][], dimensions: { N: number; M: number }) => {
     skipImportedCsvRemapRef.current = true;
     setExcludedColorKeys(new Set());
+    clearEditHistory();
+    currentGridRef.current = grid;
     setMappedPixelData(grid);
     setGridDimensions(dimensions);
     const counts: { [key: string]: { count: number; color: string } } = {};
@@ -688,6 +757,7 @@ export default function Home() {
 
   // 处理裁剪确认
   const handleCropConfirm = (croppedImageSrc: string) => {
+    clearEditHistory();
     setOriginalImageSrc(croppedImageSrc);
     setMappedPixelData(null);
     setGridDimensions(null);
@@ -734,6 +804,7 @@ export default function Home() {
 
   // 处理AI优化完成
   const handleAIOptimized = (optimizedImageSrc: string) => {
+    clearEditHistory();
     // 使用优化后的图片替换原图，并重新处理
     setOriginalImageSrc(optimizedImageSrc);
     setMappedPixelData(null);
@@ -1047,6 +1118,8 @@ export default function Home() {
 
       // --- 绘制和状态更新 ---
       if (pixelatedCanvasRef.current) {
+        clearEditHistory();
+        currentGridRef.current = mergedData;
         setMappedPixelData(mergedData);
         setGridDimensions({ N, M });
 
@@ -1282,7 +1355,7 @@ export default function Home() {
 
             // 同时更新状态
             setExcludedColorKeys(nextExcludedKeys); // 应用此颜色的排除
-            setMappedPixelData(newMappedData); // 使用重映射的数据更新
+            commitGridEdit(newMappedData, currentExcluded, nextExcludedKeys); // 可撤销颜色排除
 
             // 基于*新*映射数据重新计算计数（以hex为键）
             const newCounts: { [hexKey: string]: { count: number; color: string } } = {};
@@ -1304,8 +1377,7 @@ export default function Home() {
 
             // ++ 在更新状态后，重新绘制 Canvas ++
             if (pixelatedCanvasRef.current && gridDimensions) {
-              setMappedPixelData(newMappedData);
-              // 不要调用 setGridDimensions，因为颜色排除不需要改变网格尺寸
+              // 已提交网格编辑；不要调用 setGridDimensions，因为颜色排除不需要改变网格尺寸
             } else {
                console.error("Canvas ref or grid dimensions missing, skipping draw call in handleToggleExcludeColor.");
             }
@@ -1316,6 +1388,7 @@ export default function Home() {
             console.log(`Re-including color: ${hexKey}. Triggering full remap.`);
             const nextExcludedKeys = new Set(currentExcluded);
             nextExcludedKeys.delete(hexKey);
+            clearEditHistory(); // 恢复颜色重新生成图纸，旧历史不可继续应用
             setExcludedColorKeys(nextExcludedKeys);
             // 此处无需重置 initialGridColorKeys，完全重映射会通过 pixelateImage 重新计算它
             setRemapTrigger(prev => prev + 1); // *** KEPT setRemapTrigger here for re-inclusion ***
@@ -1402,7 +1475,7 @@ export default function Home() {
       pushIfTarget(row, col + 1);
     }
 
-    setMappedPixelData(newPixelData);
+    commitGridEdit(newPixelData);
 
     const newColorCounts: { [hexKey: string]: { count: number; color: string } } = {};
     let newTotalCount = 0;
@@ -1471,7 +1544,7 @@ export default function Home() {
     }
     
     // 更新状态
-    setMappedPixelData(newPixelData);
+    commitGridEdit(newPixelData);
     
     // 重新计算颜色统计
     if (colorCounts) {
@@ -1558,68 +1631,13 @@ export default function Home() {
         return;
       }
 
-      // Manual Coloring Logic - 保持原有的上色逻辑
-      if (isClick && isManualColoringMode && selectedColor) {
-        // 手动上色模式逻辑保持不变
-        // ...现有代码...
-        const newPixelData = mappedPixelData.map(row => row.map(cell => ({ ...cell })));
-        const currentCell = newPixelData[j]?.[i];
-
-        if (!currentCell) return;
-
-        const previousKey = currentCell.key;
-        const wasExternal = currentCell.isExternal;
-        
-        let newCellData: MappedPixel;
-        
-        if (selectedColor.key === TRANSPARENT_KEY) {
-          newCellData = { ...transparentColorData };
-        } else {
-          newCellData = { ...selectedColor, isExternal: false };
-        }
-
-        // Only update if state changes
-        if (newCellData.key !== previousKey || newCellData.isExternal !== wasExternal) {
-          newPixelData[j][i] = newCellData;
-          setMappedPixelData(newPixelData);
-
-          // Update color counts
-          if (colorCounts) {
-            const newColorCounts = { ...colorCounts };
-            let newTotalCount = totalBeadCount;
-
-            // 处理之前颜色的减少（使用hex值）
-            if (!wasExternal && previousKey !== TRANSPARENT_KEY) {
-              const previousCell = mappedPixelData[j][i];
-              const previousHex = previousCell?.color?.toUpperCase();
-              if (previousHex && newColorCounts[previousHex]) {
-                newColorCounts[previousHex].count--;
-                if (newColorCounts[previousHex].count <= 0) {
-                  delete newColorCounts[previousHex];
-              }
-              newTotalCount--;
-              }
-            }
-
-            // 处理新颜色的增加（使用hex值）
-            if (!newCellData.isExternal && newCellData.key !== TRANSPARENT_KEY) {
-              const newHex = newCellData.color.toUpperCase();
-              if (!newColorCounts[newHex]) {
-                newColorCounts[newHex] = {
-                  count: 0,
-                  color: newHex
-                };
-              }
-              newColorCounts[newHex].count++;
-              newTotalCount++;
-            }
-
-            setColorCounts(newColorCounts);
-            setTotalBeadCount(newTotalCount);
-          }
-        }
-        
-        // 上色操作后隐藏提示
+      // Ordinary click: one bead. Continuous painting uses pointer events.
+      if (isClick && isManualColoringMode && selectedColor && !isContinuousBrush) {
+        const next = mappedPixelData.map(line => line.slice());
+        if (!next[j]?.[i]) return;
+        next[j][i] = selectedColor.key === TRANSPARENT_KEY
+          ? { ...transparentColorData } : { ...selectedColor, isExternal: false };
+        commitGridEdit(next);
         setTooltipData(null);
       }
       // Tooltip Logic (非手动上色模式点击或悬停)
@@ -1938,7 +1956,7 @@ export default function Home() {
 
     if (replaceCount > 0) {
       // 更新像素数据
-      setMappedPixelData(newPixelData);
+      commitGridEdit(newPixelData);
 
       // 重新计算颜色统计
       if (colorCounts) {
@@ -2384,6 +2402,10 @@ export default function Home() {
                     gridDimensions={gridDimensions}
                     isManualColoringMode={isManualColoringMode}
                     onInteraction={handleCanvasInteraction}
+                    isContinuousBrush={isManualColoringMode && isContinuousBrush && !isEraseMode && !colorReplaceState.isActive && !!selectedColor}
+                    onBrushStart={startBrush}
+                    onBrushMove={moveBrush}
+                    onBrushEnd={finishBrush}
                     highlightRequest={highlightRequest}
                     onHighlightComplete={handleHighlightComplete}
                   />
@@ -2666,6 +2688,17 @@ export default function Home() {
           selectedColorSystem={selectedColorSystem}
           isEraseMode={isEraseMode}
           onEraseToggle={handleEraseToggle}
+          isContinuousBrush={isContinuousBrush}
+          onContinuousBrushToggle={() => {
+            finishBrush();
+            setIsContinuousBrush(previous => !previous);
+            setIsEraseMode(false);
+            setColorReplaceState({ isActive: false, step: 'select-source' });
+          }}
+          undoCount={historyStatus.undo}
+          redoCount={historyStatus.redo}
+          onUndo={undoEdit}
+          onRedo={redoEdit}
           fullPaletteColors={fullPaletteColors}
           showFullPalette={showFullPalette}
           onToggleFullPalette={handleToggleFullPalette}

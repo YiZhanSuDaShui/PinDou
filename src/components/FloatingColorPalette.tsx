@@ -13,6 +13,12 @@ interface FloatingColorPaletteProps {
   selectedColorSystem: ColorSystem;
   isEraseMode: boolean;
   onEraseToggle: () => void;
+  isContinuousBrush: boolean;
+  onContinuousBrushToggle: () => void;
+  undoCount: number;
+  redoCount: number;
+  onUndo: () => void;
+  onRedo: () => void;
   fullPaletteColors: { key: string; color: string }[];
   showFullPalette: boolean;
   onToggleFullPalette: () => void;
@@ -33,6 +39,12 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
   selectedColorSystem,
   isEraseMode,
   onEraseToggle,
+  isContinuousBrush,
+  onContinuousBrushToggle,
+  undoCount,
+  redoCount,
+  onUndo,
+  onRedo,
   fullPaletteColors,
   showFullPalette,
   onToggleFullPalette,
@@ -182,7 +194,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
     >
       {/* 标题栏和控制按钮 */}
       <div
-        className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-t-xl cursor-move"
+        className="flex items-center justify-between p-3 bg-gradient-to-r from-[#ff7fae] via-[#f65a9b] to-[#d96fb8] text-white rounded-t-xl cursor-move"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       >
@@ -194,9 +206,35 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
         </div>
         
         <div className="flex items-center gap-1">
+          <button type="button" onPointerDown={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+            onClick={onUndo} disabled={undoCount === 0}
+            className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title={undoCount ? `撤销（剩余 ${undoCount}/5 步）· Ctrl/⌘+Z` : '没有可撤销的操作'}
+            aria-label="撤销">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/>
+            </svg>
+          </button>
+          <button type="button" onPointerDown={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+            onClick={onRedo} disabled={redoCount === 0}
+            className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title={redoCount ? `重做（可恢复 ${redoCount} 步）· Ctrl/⌘+Shift+Z` : '没有可重做的操作'}
+            aria-label="重做">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="m15 14 5-5-5-5m5 5H10a6 6 0 0 0 0 12h2"/>
+            </svg>
+          </button>
+          <span className="mx-0.5 w-px h-4 bg-white/30" aria-hidden="true" />
           {/* 关闭按钮 */}
           <button
             onClick={onToggleOpen}
+            onPointerDown={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()}
             className="p-1 hover:bg-white/20 rounded transition-colors"
             title="关闭调色盘"
           >
@@ -231,19 +269,21 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
 
           {/* 工具按钮行 */}
           <div className="flex gap-2 mb-3">
-            {/* 橡皮擦按钮 */}
-            <button
-              onClick={() => handleColorClick({ key: TRANSPARENT_KEY, color: '#FFFFFF' })}
-              className={`flex-1 p-2 rounded-lg border transition-all duration-200 flex items-center justify-center gap-1 text-xs ${
-                selectedColor?.key === TRANSPARENT_KEY
-                  ? 'bg-red-500 text-white border-red-500'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-red-50 dark:hover:bg-red-900/20'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            {/* 连续画笔：普通点击单格，开启后按住并拖动绘制 2×2 格 */}
+            <button type="button"
+              onClick={onContinuousBrushToggle}
+              aria-pressed={isContinuousBrush}
+              title={isContinuousBrush ? '关闭连续画笔，恢复单格点击' : '开启 2×2 格连续画笔，可按住拖动'}
+              className={`flex-1 min-w-0 p-2 rounded-lg border transition-all duration-200 flex flex-col items-center justify-center gap-1 text-xs ${
+                isContinuousBrush
+                  ? 'bg-[#d94687] text-white border-[#d94687] shadow-sm'
+                  : 'bg-[#fff0f6] dark:bg-[#4b293b] text-[#a33768] dark:text-[#ffc0d9] border-[#f6c6da] dark:border-[#85536d] hover:bg-[#ffe0ed]'
+              }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m14 6 4 4M3 21c4 0 7-2 7-6l8-8a2.83 2.83 0 0 0-4-4l-8 8c-1 1-2 4-3 10Z"/>
               </svg>
-              橡皮擦
+              <span>连续画笔</span>
             </button>
 
             {/* 一键擦除按钮 */}
@@ -251,8 +291,8 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
               onClick={onEraseToggle}
               className={`flex-1 p-2 rounded-lg border transition-all duration-200 flex items-center justify-center gap-1 text-xs ${
                 isEraseMode
-                  ? 'bg-orange-500 text-white border-orange-500'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+                  ? 'bg-[#e89a72] text-white border-[#e89a72]'
+                  : 'bg-[#fff1e9] dark:bg-[#513a3c] text-[#98634f] dark:text-[#ffceba] border-[#f2cbb7] dark:border-[#865e5f] hover:bg-[#ffe3d4]'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -266,8 +306,8 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
               onClick={onColorReplaceToggle}
               className={`flex-1 p-2 rounded-lg border transition-all duration-200 flex items-center justify-center gap-1 text-xs ${
                 colorReplaceState.isActive
-                  ? 'bg-blue-500 text-white border-blue-500'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                  ? 'bg-[#b779ba] text-white border-[#b779ba]'
+                  : 'bg-[#f8edfa] dark:bg-[#48344c] text-[#865a91] dark:text-[#edc5f2] border-[#e5c7e8] dark:border-[#76557e] hover:bg-[#f1def5]'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -299,7 +339,7 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
                   onClick={() => handleColorClick(colorData)}
                   className={`group relative aspect-square rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
                     isSelected
-                      ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800 scale-110'
+                      ? 'border-[#e55c9b] dark:border-[#f8a4cd] ring-2 ring-[#f9cbdf] dark:ring-[#7f365e] scale-110'
                       : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                   }`}
                   style={{ backgroundColor: colorData.color }}
