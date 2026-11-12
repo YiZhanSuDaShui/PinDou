@@ -3,9 +3,12 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { MappedPixel } from '../utils/pixelation';
 
+export type ColorPreviewMode = 'gold' | 'isolate';
+
 export interface GoldenSweepRequest {
   color: string;
   id: number;
+  mode: ColorPreviewMode;
 }
 
 interface GoldenSweepOverlayProps {
@@ -16,35 +19,41 @@ interface GoldenSweepOverlayProps {
   onComplete?: (id: number) => void;
 }
 
-type Sweep = {
-  id: number;
+type Preview = {
+  request: GoldenSweepRequest;
+  mask: HTMLCanvasElement;
   columns: Array<number[] | undefined>;
   first: number;
   last: number;
   start: number;
   end: number;
   radius: number;
-  duration: number;
+  sweepDuration: number;
   started: number;
+  reducedMotion: boolean;
 };
 
-type FadingSweep = { sweep: Sweep; head: number; started: number };
+type Interrupted = { snapshot: HTMLCanvasElement; started: number };
 
-const START_DELAY = 65;
-const FADE_DURATION = 160;
-// The pulse travels across the selected color's actual horizontal bounds,
-// NOT from the left edge of the whole picture. This avoids waiting for a
-// right-hand detail to light up.
-function buildSweep(
+const START_DELAY_MS = 65;
+const GOLD_HOLD_MS = 2000;
+const ISOLATE_HOLD_MS = 3000;
+const NATURAL_FADE_MS = 400;
+const INTERRUPT_FADE_MS = 160;
+
+function createPreview(
   data: MappedPixel[][],
   dims: { N: number; M: number },
+  base: HTMLCanvasElement,
   request: GoldenSweepRequest,
   now: number
-): Sweep | null {
+): Preview | null {
+  if (dims.N <= 0 || dims.M <= 0 || !base.width || !base.height) return null;
+
   const columns: Array<number[] | undefined> = new Array(dims.N);
+  const target = request.color.toUpperCase();
   let first = dims.N;
   let last = -1;
-  const target = request.color.toUpperCase();
 
   for (let y = 0; y < dims.M; y++) {
     for (let x = 0; x < dims.N; x++) {
@@ -59,105 +68,195 @@ function buildSweep(
   }
   if (last < first) return null;
 
+  const mask = document.createElement('canvas');
+  mask.width = base.width;
+  mask.height = base.height;
+  const ctx = mask.getContext('2d');
+  if (!ctx) return null;
+
+  const cellW = base.width / dims.N;
+  const cellH = base.height / dims.M;
+
+  if (request.mode === 'isolate') {
+    // Cover every non-target bead with the neutral preview background.
+    // Clearing target bead rectangles reveals their true colors and positions
+    // from the original canvas beneath this completely separate layer.
+    const dark = document.documentElement.classList.contains('dark');
+    ctx.fillStyle = dark ? '#374151' : '#F3F4F6';
+    ctx.fillRect(0, 0, mask.width, mask.height);
+
+    // Keep a discreet grid on empty cells for spatial orientation.
+    if (cellW >= 3 && cellH >= 3) {
+      ctx.strokeStyle = dark ? 'rgba(210, 215, 225, 0.13)' : 'rgba(136, 120, 132, 0.14)';
+      ctx.lineWidth = Math.max(0.5, Math.min(1, Math.min(cellW, cellH) * 0.08));
+      ctx.beginPath();
+      for (let x = 1; x < dims.N; x++) {
+        const at = x * cellW;
+        ctx.moveTo(at, 0);
+        ctx.lineTo(at, mask.height);
+      }
+      for (let y = 1; y < dims.M; y++) {
+        const at = y * cellH;
+        ctx.moveTo(0, at);
+        ctx.lineTo(mask.width, at);
+      }
+      ctx.stroke();
+    }
+
+    for (let x = first; x <= last; x++) {
+      const rows = columns[x];
+      if (!rows) continue;
+      for (const y of rows) {
+        ctx.clearRect(x * cellW, y * cellH, cellW, cellH);
+      }
+    }
+  } else {
+    // Cache a gentle full-image champagne-gold tint for the *selected beads*.
+    // Reveal it progressively during the sweep, then hold it for two seconds.
+    const cellSize = Math.min(cellW, cellH);
+    for (let x = first; x <= last; x++) {
+      const rows = columns[x];
+      if (!rows) continue;
+      for (const y of rows) {
+        const px = x * cellW;
+        const py = y * cellH;
+        ctx.fillStyle = 'rgba(235, 170, 52, 0.36)';
+        ctx.fillRect(px, py, cellW, cellH);
+        ctx.fillStyle = 'rgba(255, 241, 170, 0.25)';
+        ctx.fillRect(px + cellW * 0.13, py + cellH * 0.12, cellW * 0.74, cellH * 0.66);
+        if (cellSize >= 2.2) {
+          ctx.strokeStyle = 'rgba(255, 232, 136, 0.55)';
+          ctx.lineWidth = Math.max(0.6, Math.min(1.4, cellSize * 0.08));
+          ctx.strokeRect(px + 0.5, py + 0.5,
+            Math.max(0, cellW - 1), Math.max(0, cellH - 1));
+        }
+      }
+    }
+  }
+
   const span = last - first + 1;
   return {
-    id: request.id, columns, first, last,
-    start: first - 1.7, end: last + 2.7,
-    radius: Math.max(2.25, Math.min(3.3, span * 0.10)),
-    duration: Math.min(850, 455 + 360 * span / Math.max(1, dims.N)),
-    started: now
+    request, mask, columns, first, last,
+    start: first - 1.7,
+    end: last + 2.7,
+    radius: Math.max(2.25, Math.min(3.3, span * 0.1)),
+    sweepDuration: Math.min(850, 455 + 360 * span / Math.max(1, dims.N)),
+    started: now,
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches
   };
 }
 
-function headAt(sweep: Sweep, now: number): number {
+function sweepHead(preview: Preview, elapsed: number): number {
   const t = Math.max(0, Math.min(1,
-    (now - sweep.started - START_DELAY) / sweep.duration));
-  // A soft acceleration/deceleration, with no simultaneous flash.
+    (elapsed - START_DELAY_MS) / preview.sweepDuration));
   const eased = t * t * (3 - 2 * t);
-  return sweep.start + (sweep.end - sweep.start) * eased;
+  return preview.start + (preview.end - preview.start) * eased;
 }
 
-function paintGold(
+function drawMovingShimmer(
   ctx: CanvasRenderingContext2D,
-  sweep: Sweep,
+  preview: Preview,
   head: number,
-  opacity: number,
-  cellWidth: number,
-  cellHeight: number
+  cellW: number,
+  cellH: number
 ) {
-  if (opacity <= 0) return;
-  // Only visit the columns near the moving light band. Large bead grids
-  // remain responsive and the underlying picture is never redrawn per frame.
-  const left = Math.max(0, Math.floor(head - sweep.radius));
-  const right = Math.min(sweep.columns.length - 1, Math.ceil(head + sweep.radius));
+  const left = Math.max(0, Math.floor(head - preview.radius));
+  const right = Math.min(preview.columns.length - 1, Math.ceil(head + preview.radius));
+  const size = Math.min(cellW, cellH);
   for (let x = left; x <= right; x++) {
-    const rows = sweep.columns[x];
+    const rows = preview.columns[x];
     if (!rows) continue;
-    const distance = Math.abs(x + 0.5 - head) / sweep.radius;
-    if (distance >= 1) continue;
-    const strength = (1 - distance) ** 2 * (3 - 2 * (1 - distance)) * opacity;
-    const bx = x * cellWidth;
-    const accent = Math.min(cellWidth, cellHeight);
+    const normalized = Math.abs(x + 0.5 - head) / preview.radius;
+    if (normalized >= 1) continue;
+    const signal = 1 - normalized;
+    const strength = signal * signal * (3 - 2 * signal);
+    ctx.fillStyle = 'rgba(255, 241, 164, ' + (0.6 * strength).toFixed(3) + ')';
+    ctx.strokeStyle = 'rgba(255, 250, 201, ' + (0.9 * strength).toFixed(3) + ')';
+    ctx.lineWidth = Math.max(0.6, Math.min(1.6, size * 0.09));
     for (const y of rows) {
-      const by = y * cellHeight;
-      // Champagne-gold wash, a bright inner shimmer, and a thin illuminated
-      // bead edge. Each remains translucent so the true color shows through.
-      ctx.fillStyle = `rgba(245, 188, 61, ${(0.53 * strength).toFixed(3)})`;
-      ctx.fillRect(bx, by, cellWidth, cellHeight);
-      ctx.fillStyle = `rgba(255, 248, 186, ${(0.49 * strength).toFixed(3)})`;
-      ctx.fillRect(bx + cellWidth * 0.15, by + cellHeight * 0.13,
-        cellWidth * 0.7, cellHeight * 0.55);
-      if (accent >= 2.2) {
-        ctx.strokeStyle = `rgba(255, 236, 143, ${(0.83 * strength).toFixed(3)})`;
-        ctx.lineWidth = Math.max(0.7, Math.min(1.5, accent * 0.08));
-        ctx.strokeRect(bx + 0.5, by + 0.5,
-          Math.max(0, cellWidth - 1), Math.max(0, cellHeight - 1));
+      const px = x * cellW;
+      const py = y * cellH;
+      ctx.fillRect(px, py, cellW, cellH);
+      if (size >= 2.2) {
+        ctx.strokeRect(px + 0.5, py + 0.5,
+          Math.max(0, cellW - 1), Math.max(0, cellH - 1));
       }
     }
   }
 }
 
+function paintPreview(
+  ctx: CanvasRenderingContext2D,
+  preview: Preview,
+  now: number,
+  dims: { N: number; M: number }
+): boolean {
+  const elapsed = now - preview.started;
+  const cellW = ctx.canvas.width / dims.N;
+  const cellH = ctx.canvas.height / dims.M;
 
-function paintStaticGold(
-  ctx: CanvasRenderingContext2D, sweep: Sweep,
-  cellWidth: number, cellHeight: number
-) {
-  // Reduced-motion users see a short stationary locator instead of a sweep.
-  // One pass over matching beads, without re-creating column maps per frame.
-  ctx.fillStyle = 'rgba(246, 201, 85, 0.52)';
-  for (let x = sweep.first; x <= sweep.last; x++) {
-    const rows = sweep.columns[x];
-    if (!rows) continue;
-    for (const y of rows) {
-      ctx.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
-    }
+  if (preview.request.mode === 'isolate') {
+    // At exactly 3s the hidden colors begin to return smoothly.
+    const fadeElapsed = elapsed - ISOLATE_HOLD_MS;
+    if (fadeElapsed >= NATURAL_FADE_MS) return false;
+    const opacity = fadeElapsed <= 0 ? 1 : Math.max(0, 1 - fadeElapsed / NATURAL_FADE_MS);
+    ctx.globalAlpha = preview.reducedMotion ? (fadeElapsed <= 0 ? 1 : 0) : opacity;
+    ctx.drawImage(preview.mask, 0, 0);
+    ctx.globalAlpha = 1;
+    return true;
   }
+
+  const sweepEnd = preview.reducedMotion ? 0 : START_DELAY_MS + preview.sweepDuration;
+  const fadeStart = sweepEnd + GOLD_HOLD_MS;
+  if (elapsed >= fadeStart + NATURAL_FADE_MS) return false;
+
+  if (elapsed < sweepEnd) {
+    if (elapsed >= START_DELAY_MS) {
+      const head = sweepHead(preview, elapsed);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, Math.max(0, head * cellW), ctx.canvas.height);
+      ctx.clip();
+      ctx.drawImage(preview.mask, 0, 0);
+      ctx.restore();
+      drawMovingShimmer(ctx, preview, head, cellW, cellH);
+    }
+  } else {
+    // The entire selected color remains illuminated for two full seconds
+    // after the sweep has *finished*, not two seconds after the click.
+    const fadeElapsed = elapsed - fadeStart;
+    ctx.globalAlpha = fadeElapsed <= 0 ? 1
+      : preview.reducedMotion ? 0
+      : Math.max(0, 1 - fadeElapsed / NATURAL_FADE_MS);
+    ctx.drawImage(preview.mask, 0, 0);
+    ctx.globalAlpha = 1;
+  }
+  return true;
 }
 
 export default function GoldenSweepOverlay({
   sourceCanvasRef, mappedPixelData, gridDimensions, request, onComplete
 }: GoldenSweepOverlayProps) {
   const overlayRef = useRef<HTMLCanvasElement>(null);
-  const modelRef = useRef({ mappedPixelData, gridDimensions });
-  modelRef.current = { mappedPixelData, gridDimensions };
+  const dataRef = useRef({ mappedPixelData, gridDimensions });
+  dataRef.current = { mappedPixelData, gridDimensions };
   const completionRef = useRef(onComplete);
   completionRef.current = onComplete;
+
   const runningRef = useRef<{
-    active: Sweep | null;
-    fading: FadingSweep | null;
+    active: Preview | null;
+    fading: Interrupted | null;
     frame: number | null;
   }>({ active: null, fading: null, frame: null });
 
-  // A single rAF loop owns both the new sweep and the quickly fading
-  // interrupted sweep. Repeated A -> B -> C changes never queue animations.
   const frameRef = useRef<(time: number) => void>(() => {});
   frameRef.current = (time: number) => {
     const state = runningRef.current;
     state.frame = null;
     const canvas = overlayRef.current;
     const base = sourceCanvasRef.current;
-    const dims = modelRef.current.gridDimensions;
-    if (!canvas || !base || !dims || !modelRef.current.mappedPixelData) return;
+    const dims = dataRef.current.gridDimensions;
+    if (!canvas || !base || !dims || !dataRef.current.mappedPixelData) return;
 
     if (canvas.width !== base.width || canvas.height !== base.height) {
       canvas.width = base.width;
@@ -166,49 +265,34 @@ export default function GoldenSweepOverlay({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const cellWidth = canvas.width / dims.N;
-    const cellHeight = canvas.height / dims.M;
 
+    // Freeze the previous visual frame and fade it in 160ms. This also
+    // handles isolate -> gold and gold -> isolate, not just A -> B colors.
     if (state.fading) {
-      const fade = 1 - (time - state.fading.started) / FADE_DURATION;
+      const fade = 1 - (time - state.fading.started) / INTERRUPT_FADE_MS;
       if (fade > 0) {
-        paintGold(ctx, state.fading.sweep, state.fading.head, fade, cellWidth, cellHeight);
+        ctx.globalAlpha = fade;
+        ctx.drawImage(state.fading.snapshot, 0, 0);
+        ctx.globalAlpha = 1;
       } else {
         state.fading = null;
       }
     }
 
     if (state.active) {
-      const sweep = state.active;
-      const elapsed = time - sweep.started;
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (reducedMotion) {
-        // Accessibility: a brief static color locator instead of travel.
-        if (elapsed < 220) {
-          paintStaticGold(ctx, sweep, cellWidth, cellHeight);
-        }
-      } else {
-        const head = headAt(sweep, time);
-        const tail = Math.max(0, Math.min(1,
-          (START_DELAY + sweep.duration + 125 - elapsed) / 125));
-        if (tail > 0 && elapsed >= START_DELAY) {
-          paintGold(ctx, sweep, head, tail, cellWidth, cellHeight);
-        }
-      }
-      const stopAt = reducedMotion ? 220 : START_DELAY + sweep.duration + 125;
-      if (elapsed >= stopAt) {
+      const preview = state.active;
+      if (!paintPreview(ctx, preview, time, dims)) {
         state.active = null;
-        completionRef.current?.(sweep.id);
+        completionRef.current?.(preview.request.id);
       }
     }
-
     if (state.active || state.fading) {
       state.frame = requestAnimationFrame(t => frameRef.current(t));
     }
   };
 
-  // Grid changes (editing/removing a color/importing a CSV) invalidate the
-  // previous geometry. Do not restart an old highlight on changed cells.
+  // Grid edits/imports invalidate all cached masks; no old light may be
+  // painted over new bead coordinates or after a deleted color.
   useEffect(() => {
     const state = runningRef.current;
     if (state.frame !== null) cancelAnimationFrame(state.frame);
@@ -223,30 +307,32 @@ export default function GoldenSweepOverlay({
   useEffect(() => {
     const state = runningRef.current;
     const now = performance.now();
+    const canvas = overlayRef.current;
+    const base = sourceCanvasRef.current;
 
-    // Freeze the interrupted beam where it was, then fade it out in 160ms.
-    // Never make the new beam wait for the previous one to finish.
-    if (state.active) {
-      state.fading = {
-        sweep: state.active,
-        head: headAt(state.active, now),
-        started: now
-      };
+    // Capture the current composite scene instead of just its moving head:
+    // a completed gold sweep now holds EVERY bead, and an eye preview can
+    // completely mask the non-target colors.
+    if ((state.active || state.fading) && canvas && canvas.width && canvas.height) {
+      const snapshot = document.createElement('canvas');
+      snapshot.width = canvas.width;
+      snapshot.height = canvas.height;
+      snapshot.getContext('2d')?.drawImage(canvas, 0, 0);
+      state.fading = { snapshot, started: now };
+    } else {
+      state.fading = null;
     }
     state.active = null;
 
-    if (request && modelRef.current.mappedPixelData && modelRef.current.gridDimensions) {
-      state.active = buildSweep(
-        modelRef.current.mappedPixelData, modelRef.current.gridDimensions,
-        request, now
-      );
+    if (request && base && dataRef.current.mappedPixelData && dataRef.current.gridDimensions) {
+      state.active = createPreview(dataRef.current.mappedPixelData, dataRef.current.gridDimensions,
+        base, request, now);
       if (!state.active) completionRef.current?.(request.id);
     }
-
     if ((state.active || state.fading) && state.frame === null) {
-      state.frame = requestAnimationFrame(time => frameRef.current(time));
+      state.frame = requestAnimationFrame(t => frameRef.current(t));
     }
-  }, [request]);
+  }, [request, sourceCanvasRef]);
 
   useEffect(() => () => {
     const state = runningRef.current;
