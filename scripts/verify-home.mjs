@@ -158,6 +158,25 @@ try {
   );
   assert.equal(mobileButtons.length, 3, 'mobile should show three editor actions');
   assert.ok(mobileButtons.every(item => Math.abs(item.y - mobileButtons[0].y) < 2), 'mobile actions must be side-by-side');
+  const mobileButtonStyles = await mobile.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => {
+      const style = getComputedStyle(item);
+      return {
+        background: style.backgroundColor,
+        border: style.borderColor,
+        color: style.color,
+        shadow: style.boxShadow,
+        radius: style.borderRadius
+      };
+    })
+  );
+  assert.deepEqual(mobileButtonStyles[1], mobileButtonStyles[0],
+    'mobile: focus mode button must match manual edit button styling');
+  assert.deepEqual(mobileButtonStyles[2], mobileButtonStyles[0],
+    'mobile: archive button must match manual edit button styling');
+  assert.equal(mobileButtonStyles[0].background, 'rgb(255, 255, 255)',
+    'mobile: all three editor buttons should share white backgrounds');
+
   await mobile.screenshot({ path: path.join(output, 'mobile-three-actions.png'), animations: 'disabled' });
   await mobile.close();
 
@@ -231,6 +250,25 @@ try {
   assert.equal(await desktopActions.count(), 3, 'desktop should have exactly three editor buttons');
   const actionY = await desktopActions.evaluateAll(items => items.map(el => el.getBoundingClientRect().y));
   assert.ok(actionY.every(y => Math.abs(y - actionY[0]) < 2), 'desktop actions must be side by side');
+  const desktopButtonStyles = await desktop.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => {
+      const style = getComputedStyle(item);
+      return {
+        background: style.backgroundColor,
+        border: style.borderColor,
+        color: style.color,
+        shadow: style.boxShadow,
+        radius: style.borderRadius
+      };
+    })
+  );
+  assert.deepEqual(desktopButtonStyles[1], desktopButtonStyles[0],
+    'desktop: focus mode button must match manual edit button styling');
+  assert.deepEqual(desktopButtonStyles[2], desktopButtonStyles[0],
+    'desktop: archive button must match manual edit button styling');
+  assert.equal(desktopButtonStyles[0].background, 'rgb(255, 255, 255)',
+    'desktop: all three editor buttons should share white backgrounds');
+
   await desktop.getByRole('button', { name: '生成对接码' }).click();
   const archiveModal = desktop.getByRole('dialog', { name: '已生成对接码' });
   await archiveModal.waitFor({ timeout: 15000 });
