@@ -495,7 +495,7 @@ try {
       if (col < 3 || col > 32 || row < 3 || row > 80) return 'TRANSPARENT';
       return (row + col) % 11 === 0 ? '#B85F86' : '#FFF0F5';
     }).join(',')
-  ).join('\\n');
+  ).join('\n');
 
   const checkPortraitCanvas = async (page, label) => {
     await page.getByText('拼豆效果预览').waitFor({ timeout: 25000 });
