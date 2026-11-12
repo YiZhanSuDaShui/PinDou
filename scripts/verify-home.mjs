@@ -158,6 +158,9 @@ try {
   );
   assert.equal(mobileButtons.length, 3, 'mobile should show three editor actions');
   assert.ok(mobileButtons.every(item => Math.abs(item.y - mobileButtons[0].y) < 2), 'mobile actions must be side-by-side');
+  // Avoid a previous click leaving the cursor hovering over just one button.
+  await mobile.mouse.move(1, 1);
+  await mobile.waitForTimeout(250);
   const mobileButtonStyles = await mobile.locator('.studio-edit-actions > button').evaluateAll(items =>
     items.map(item => {
       const style = getComputedStyle(item);
@@ -250,6 +253,9 @@ try {
   assert.equal(await desktopActions.count(), 3, 'desktop should have exactly three editor buttons');
   const actionY = await desktopActions.evaluateAll(items => items.map(el => el.getBoundingClientRect().y));
   assert.ok(actionY.every(y => Math.abs(y - actionY[0]) < 2), 'desktop actions must be side by side');
+  // Compare the same idle state for all three buttons, not one hovered button.
+  await desktop.mouse.move(1, 1);
+  await desktop.waitForTimeout(250);
   const desktopButtonStyles = await desktop.locator('.studio-edit-actions > button').evaluateAll(items =>
     items.map(item => {
       const style = getComputedStyle(item);
