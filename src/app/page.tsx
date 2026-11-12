@@ -155,7 +155,9 @@ export default function Home() {
   });
 
   // 新增：高亮相关状态
-  const [highlightColorKey, setHighlightColorKey] = useState<string | null>(null);
+  const [highlightRequest, setHighlightRequest] = useState<{ color: string; id: number } | null>(null);
+  const highlightSequenceRef = useRef(0);
+  const highlightColorKey = highlightRequest?.color ?? null;
 
   // 新增：完整色板切换状态
   const [showFullPalette, setShowFullPalette] = useState<boolean>(false);
@@ -756,7 +758,7 @@ export default function Home() {
         isActive: false,
         step: 'select-source'
       });
-      setHighlightColorKey(null);
+      setHighlightRequest(null);
     }
     
     setIsEraseMode(!isEraseMode);
@@ -1810,14 +1812,26 @@ export default function Home() {
     importPaletteInputRef.current?.click();
   };
 
-  // 新增：处理颜色高亮
+  // Every intent gets a new sequence ID, including re-selecting the same
+  // color. A completed A animation must never clear a newer B selection.
   const handleHighlightColor = (colorHex: string) => {
-    setHighlightColorKey(colorHex);
+    highlightSequenceRef.current += 1;
+    setHighlightRequest({
+      color: colorHex.toUpperCase(),
+      id: highlightSequenceRef.current
+    });
   };
 
-  // 新增：高亮完成回调
-  const handleHighlightComplete = () => {
-    setHighlightColorKey(null);
+  // Moving away from a color stops the beam and gently fades it out.
+  // If the pointer has already entered B, leaving A must not cancel B.
+  const handleEndColorPreview = (colorHex: string) => {
+    setHighlightRequest(current =>
+      current?.color === colorHex.toUpperCase() ? null : current
+    );
+  };
+
+  const handleHighlightComplete = (id: number) => {
+    setHighlightRequest(current => current?.id === id ? null : current);
   };
 
   // 新增：切换完整色板显示
@@ -1833,7 +1847,7 @@ export default function Home() {
         isActive: false,
         step: 'select-source'
       });
-      setHighlightColorKey(null);
+      setHighlightRequest(null);
     }
     
     // 选择任何颜色（包括橡皮擦）时，都应该退出一键擦除模式
@@ -1871,7 +1885,7 @@ export default function Home() {
   const handleCanvasColorSelect = (colorData: { key: string; color: string }) => {
     if (colorReplaceState.isActive && colorReplaceState.step === 'select-source') {
       // 高亮显示选中的颜色
-      setHighlightColorKey(colorData.color);
+      handleHighlightColor(colorData.color);
       // 进入第二步：选择目标颜色
       setColorReplaceState({
         isActive: true,
@@ -1943,7 +1957,7 @@ export default function Home() {
     });
     
     // 清除高亮
-    setHighlightColorKey(null);
+    setHighlightRequest(null);
   };
 
   // 生成完整色板数据（用户自定义色板中选中的所有颜色）
@@ -2354,7 +2368,7 @@ export default function Home() {
                     gridDimensions={gridDimensions}
                     isManualColoringMode={isManualColoringMode}
                     onInteraction={handleCanvasInteraction}
-                    highlightColorKey={highlightColorKey}
+                    highlightRequest={highlightRequest}
                     onHighlightComplete={handleHighlightComplete}
                   />
                 </div>
@@ -2386,22 +2400,47 @@ export default function Home() {
                   return (
                     <li
                       key={hexKey}
-                      onClick={() => handleToggleExcludeColor(hexKey)}
-                       // Apply dark mode styles for list items (normal and excluded)
-                      className={`studio-noise-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${isExcluded ? 'is-excluded' : ''}`}
-                      title={isExcluded ? `点击恢复 ${displayColorKey}` : `点击排除 ${displayColorKey}`}
+                      data-color-hex={hexKey.toUpperCase()}
+                      onPointerEnter={(event) => {
+                        if (event.pointerType !== 'touch' && !isExcluded) handleHighlightColor(hexKey);
+                      }}
+                      onPointerLeave={(event) => {
+                        if (event.pointerType !== 'touch') handleEndColorPreview(hexKey);
+                      }}
+                      className={`studio-noise-row flex items-center gap-1 rounded-lg transition-colors ${isExcluded ? 'is-excluded' : ''}`}
                     >
-                      <div className={`flex items-center space-x-2 ${isExcluded ? 'line-through' : ''}`}>
-                        {/* Adjust color swatch border */}
-                        <span
-                          className="inline-block w-4 h-4 rounded border border-gray-400 dark:border-gray-500 flex-shrink-0"
-                          style={{ backgroundColor: isExcluded ? '#666' : colorHex }} // Darker gray for excluded swatch
-                        ></span>
-                        {/* Adjust text color for key (normal and excluded) */}
-                        <span className={`studio-noise-key font-mono font-semibold ${isExcluded ? 'is-excluded' : ''}`}>{displayColorKey}</span>
-                      </div>
-                      {/* Adjust text color for count (normal and excluded) */}
-                      <span className={`studio-noise-count text-xs font-medium ${isExcluded ? 'is-excluded line-through' : ''}`}>{count} 颗</span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleExcludeColor(hexKey)}
+                        className="studio-noise-main flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg p-2 text-left"
+                        title={isExcluded ? `点击恢复 ${displayColorKey}` : `点击排除 ${displayColorKey}`}
+                      >
+                        <span className={`flex min-w-0 items-center gap-2 ${isExcluded ? 'line-through' : ''}`}>
+                          <span
+                            className="inline-block h-4 w-4 flex-shrink-0 rounded border border-gray-400 dark:border-gray-500"
+                            style={{ backgroundColor: isExcluded ? '#666' : colorHex }}
+                          />
+                          <span className={`studio-noise-key font-mono font-semibold ${isExcluded ? 'is-excluded' : ''}`}>{displayColorKey}</span>
+                        </span>
+                        <span className={`studio-noise-count shrink-0 text-xs font-medium ${isExcluded ? 'is-excluded line-through' : ''}`}>{count} 颗</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-noise-preview-button"
+                        title={`仅预览 ${displayColorKey} 在图纸中的位置`}
+                        aria-label={`预览 ${displayColorKey} 颜色的位置`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleHighlightColor(hexKey);
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                          viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6S2 12 2 12Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
                     </li>
                   );
                 })}
@@ -2588,7 +2627,7 @@ export default function Home() {
             isActive: false,
             step: 'select-source'
           });
-          setHighlightColorKey(null);
+          setHighlightRequest(null);
           setIsMagnifierActive(false);
           setMagnifierSelectionArea(null);
         }}
