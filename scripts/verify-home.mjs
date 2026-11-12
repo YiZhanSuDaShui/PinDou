@@ -547,7 +547,7 @@ try {
       const canvas = document.querySelector('.studio-preview-stage canvas');
       return canvas && canvas.height > canvas.width * 2;
     }, { timeout: 15000 });
-    const metrics = await page.locator('.studio-preview-stage canvas').evaluate(canvas => {
+    const metrics = await page.locator('.studio-preview-stage canvas').first().evaluate(canvas => {
       const box = canvas.getBoundingClientRect();
       return {
         width: canvas.width, height: canvas.height,
