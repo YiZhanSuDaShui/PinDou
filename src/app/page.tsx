@@ -93,7 +93,8 @@ import FloatingToolbar from '../components/FloatingToolbar';
 import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
-import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
+import { TRANSPARENT_KEY, transparentColorData, recalculateColorStats } from '../utils/pixelEditingUtils';
+import { applyHistoryEntry, buildHistoryEntry, paintBrushSegment, type EditHistoryEntry, type CellPosition, type PixelChange } from '../utils/manualEditHistory';
 
 // 1. 导入新的 DonationModal 组件
 import DonationModal from '../components/DonationModal';
@@ -132,6 +133,113 @@ export default function Home() {
   const [remapTrigger, setRemapTrigger] = useState<number>(0);
   const [isManualColoringMode, setIsManualColoringMode] = useState<boolean>(false);
   const [selectedColor, setSelectedColor] = useState<MappedPixel | null>(null);
+  const [isContinuousBrush, setIsContinuousBrush] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState({ undo: 0, redo: 0 });
+  const undoHistoryRef = useRef<EditHistoryEntry[]>([]);
+  const redoHistoryRef = useRef<EditHistoryEntry[]>([]);
+  const currentGridRef = useRef<MappedPixel[][] | null>(null);
+  const strokeRef = useRef<{ last: CellPosition; changes: Map<number, PixelChange>; color: MappedPixel } | null>(null);
+
+  const refreshHistoryStatus = () => setHistoryStatus({
+    undo: undoHistoryRef.current.length, redo: redoHistoryRef.current.length
+  });
+  const clearEditHistory = () => {
+    strokeRef.current = null;
+    undoHistoryRef.current = [];
+    redoHistoryRef.current = [];
+    refreshHistoryStatus();
+  };
+  const rememberEdit = (entry: EditHistoryEntry | null) => {
+    if (!entry) return;
+    undoHistoryRef.current.push(entry);
+    if (undoHistoryRef.current.length > 5) undoHistoryRef.current.shift();
+    redoHistoryRef.current = [];
+    refreshHistoryStatus();
+  };
+  const showEditedGrid = (grid: MappedPixel[][]) => {
+    currentGridRef.current = grid;
+    setMappedPixelData(grid);
+    const { colorCounts: counts, totalCount } = recalculateColorStats(grid);
+    setColorCounts(counts);
+    setTotalBeadCount(totalCount);
+  };
+  const commitGridEdit = (next: MappedPixel[][], before?: Set<string>, after?: Set<string>) => {
+    const previous = currentGridRef.current;
+    if (!previous) return;
+    const entry = buildHistoryEntry(previous, next, before, after);
+    if (!entry) return;
+    rememberEdit(entry);
+    showEditedGrid(next);
+  };
+  const replayEdit = (direction: 'undo' | 'redo') => {
+    if (strokeRef.current) return;
+    const source = direction === 'undo' ? undoHistoryRef.current : redoHistoryRef.current;
+    const destination = direction === 'undo' ? redoHistoryRef.current : undoHistoryRef.current;
+    const entry = source.pop();
+    const grid = currentGridRef.current;
+    if (!entry || !grid) return;
+    destination.push(entry);
+    showEditedGrid(applyHistoryEntry(grid, entry, direction));
+    const excluded = direction === 'undo' ? entry.excludedBefore : entry.excludedAfter;
+    if (excluded) setExcludedColorKeys(new Set(excluded));
+    const initial = direction === 'undo' ? entry.initialBefore : entry.initialAfter;
+    if (initial) setInitialGridColorKeys(new Set(initial));
+    setTooltipData(null);
+    refreshHistoryStatus();
+  };
+  const undoEdit = () => replayEdit('undo');
+  const redoEdit = () => replayEdit('redo');
+  const brushPositionFromClient = (clientX: number, clientY: number): CellPosition | null => {
+    const canvas = pixelatedCanvasRef.current;
+    if (!canvas || !gridDimensions) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height || clientX < rect.left || clientX >= rect.right ||
+      clientY < rect.top || clientY >= rect.bottom) return null;
+    return {
+      row: Math.floor((clientY - rect.top) / rect.height * gridDimensions.M),
+      col: Math.floor((clientX - rect.left) / rect.width * gridDimensions.N)
+    };
+  };
+  const drawBrushTo = (point: CellPosition) => {
+    const stroke = strokeRef.current;
+    const grid = currentGridRef.current;
+    if (!stroke || !grid) return;
+    const next = paintBrushSegment(grid, stroke.last, point, stroke.color, stroke.changes);
+    stroke.last = point;
+    if (next !== grid) showEditedGrid(next);
+  };
+  const startBrush = (clientX: number, clientY: number) => {
+    if (!isManualColoringMode || !isContinuousBrush || isEraseMode ||
+      colorReplaceState.isActive || !selectedColor || selectedColor.key === TRANSPARENT_KEY) return;
+    const point = brushPositionFromClient(clientX, clientY);
+    if (!point) return;
+    strokeRef.current = { last: point, changes: new Map(), color: { ...selectedColor, isExternal: false } };
+    drawBrushTo(point);
+  };
+  const moveBrush = (clientX: number, clientY: number) => {
+    const point = brushPositionFromClient(clientX, clientY);
+    if (strokeRef.current && point) drawBrushTo(point);
+  };
+  const finishBrush = () => {
+    const stroke = strokeRef.current;
+    strokeRef.current = null;
+    if (stroke && stroke.changes.size) rememberEdit({ changes: Array.from(stroke.changes.values()) });
+  };
+  useEffect(() => { currentGridRef.current = mappedPixelData; }, [mappedPixelData]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isManualColoringMode || !(event.ctrlKey || event.metaKey) || event.altKey ||
+        event.key.toLowerCase() !== 'z') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      event.preventDefault();
+      if (event.shiftKey) redoEdit();
+      else undoEdit();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   // 新增：一键擦除模式状态
   const [isEraseMode, setIsEraseMode] = useState<boolean>(false);
   // 新增状态变量：控制打赏弹窗
