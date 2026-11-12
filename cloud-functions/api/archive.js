@@ -45,11 +45,13 @@ function isAllowedOrigin(request, env = {}) {
 // Best-effort per-instance throttling. A six-digit code is not private:
 // operators should also enable EdgeOne's project-level anti-bot / rate rules.
 const requestsByClient = new Map();
-function tooManyRequests(request, kind) {
-  const ip = request.headers.get('eo-client-ip')
+function tooManyRequests(request, kind, trustedClientIp) {
+  // EdgeOne supplies context.clientIp; do not trust user-controlled X-Forwarded-For
+  // when the platform's verified address is available.
+  const ip = trustedClientIp
+    || request.headers.get('eo-client-ip')
     || request.headers.get('cf-connecting-ip')
     || request.headers.get('x-real-ip')
-    || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || 'unknown';
   const bucket = kind + ':' + ip;
   const now = Date.now();
@@ -137,7 +139,7 @@ export async function loadArchive(code, store) {
 export async function onRequestPost(context) {
   const { request, env = {} } = context;
   if (!isAllowedOrigin(request, env)) return json(403, { message: '此来源不能保存图纸。' });
-  if (tooManyRequests(request, 'save')) return json(429, { message: '操作太频繁，请稍后再试。' }, { 'Retry-After': '60' });
+  if (tooManyRequests(request, 'save', context.clientIp)) return json(429, { message: '操作太频繁，请稍后再试。' }, { 'Retry-After': '60' });
   if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) {
     return json(415, { message: '请发送 JSON 格式的 CSV 数据。' });
   }
@@ -168,7 +170,7 @@ export async function onRequestPost(context) {
 export async function onRequestGet(context) {
   const { request, env = {} } = context;
   if (!isAllowedOrigin(request, env)) return json(403, { message: '此来源不能读取图纸。' });
-  if (tooManyRequests(request, 'load')) return json(429, { message: '尝试次数过多，请稍后再试。' }, { 'Retry-After': '60' });
+  if (tooManyRequests(request, 'load', context.clientIp)) return json(429, { message: '尝试次数过多，请稍后再试。' }, { 'Retry-After': '60' });
   const code = new URL(request.url).searchParams.get('code');
   if (!CODE_PATTERN.test(code || '')) return json(400, { message: '请输入完整的六位数字对接码。' });
   try {
