@@ -708,27 +708,111 @@ try {
   assert.ok(switched.right > 0 && switched.left === 0,
     'new color must replace old glow promptly: ' + JSON.stringify(switched));
 
-  // The mobile-safe eye button is independent of the delete action.
+  // Eye mode is different from gold: a full neutral mask immediately hides
+  // all non-target beads, holds for 3000ms, then fades out over ~400ms.
+  const readOverlay = () => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    if (!layer || !layer.width || !layer.height) return { left: 0, right: 0, empty: 0 };
+    const ctx = layer.getContext('2d', { willReadFrequently: true });
+    const alpha = (col, row) => {
+      const x = Math.floor((col + .5) * layer.width / 40);
+      const y = Math.floor((row + .5) * layer.height / 12);
+      return ctx.getImageData(x, y, 1, 1).data[3];
+    };
+    return { left: alpha(7, 5), right: alpha(32, 5), empty: alpha(20, 5) };
+  };
+
   const countBeforeEye = await rightRow.locator('.studio-noise-count').innerText();
   await rightRow.getByRole('button', { name: /预览.*颜色的位置/ }).click();
+  await goldPage.waitForTimeout(240); // interrupted gold is fully faded by now
+  let isolated = await goldPage.evaluate(readOverlay);
+  assert.ok(isolated.left >= 248 && isolated.empty >= 248 && isolated.right <= 8,
+    'eye preview must hide every other color, not paint selected beads gold: ' + JSON.stringify(isolated));
   assert.equal(await rightRow.locator('.studio-noise-count').innerText(), countBeforeEye);
   assert.equal(await rightRow.count(), 1);
-  const gridAfterEye = await goldPage.locator('.studio-preview-stage canvas').first()
-    .evaluate(canvas => canvas.toDataURL());
-  assert.equal(gridAfterEye, gridBefore, 'glow preview must never modify the bead canvas');
 
-  // A manual palette click should play the exact same animation (and still
-  // select the chosen paint color). The actual grid remains unchanged.
+  await goldPage.waitForTimeout(2420);
+  isolated = await goldPage.evaluate(readOverlay);
+  assert.ok(isolated.left >= 248 && isolated.empty >= 248 && isolated.right <= 8,
+    'all non-target colors must still be hidden before 3 seconds: ' + JSON.stringify(isolated));
+
+  await goldPage.waitForFunction(() => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    const ctx = layer?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    const x = Math.floor(7.5 * layer.width / 40);
+    const y = Math.floor(5.5 * layer.height / 12);
+    const alpha = ctx.getImageData(x, y, 1, 1).data[3];
+    return alpha > 8 && alpha < 245;
+  }, null, { timeout: 1500 });
+  await goldPage.waitForFunction(() => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    const ctx = layer?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    const x = Math.floor(7.5 * layer.width / 40);
+    const y = Math.floor(5.5 * layer.height / 12);
+    return ctx.getImageData(x, y, 1, 1).data[3] <= 8;
+  }, null, { timeout: 1700 });
+  assert.equal(
+    await goldPage.locator('.studio-preview-stage canvas').first().evaluate(c => c.toDataURL()),
+    gridBefore, 'single-color isolation must not rewrite the underlying bead grid'
+  );
+  console.log('PASS: eye isolation holds exactly one true bead color for 3 seconds and fades');
+
+  // Manual palette gold mode: once the left-to-right beam has passed, ALL
+  // matching beads remain illuminated for another 2 seconds, then fade.
   await goldPage.getByRole('button', { name: '进入手动编辑模式' }).click();
   await goldPage.locator('button[title*="#B85F86"]').click();
   await goldPage.waitForFunction(sampleSweepCondition, null, { timeout: 2000 });
+  await goldPage.waitForTimeout(1050);
+  let manualGold = await goldPage.evaluate(readOverlay);
+  assert.ok(manualGold.left > 30 && manualGold.right === 0,
+    'target color must remain gold after the sweep finished: ' + JSON.stringify(manualGold));
+  await goldPage.waitForTimeout(950);
+  manualGold = await goldPage.evaluate(readOverlay);
+  assert.ok(manualGold.left > 30 && manualGold.right === 0,
+    'gold illumination should still remain during the 2s hold: ' + JSON.stringify(manualGold));
+
+  // Even during the prolonged hold, choosing B instantly interrupts A;
+  // the previously lit beads fade quickly, with no waiting for its timer.
+  await goldPage.locator('button[title*="#2C5B89"]').click();
+  // The moving light reaches B's LEFTMOST beads before its center. Inspect
+  // the same center pixels that the final assertion uses, after the old
+  // hold's 160ms crossfade has completely finished.
+  await goldPage.waitForFunction(() => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    const ctx = layer?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    const alpha = (col, row) => {
+      const x = Math.floor((col + .5) * layer.width / 40);
+      const y = Math.floor((row + .5) * layer.height / 12);
+      return ctx.getImageData(x, y, 1, 1).data[3];
+    };
+    return alpha(7, 5) <= 8 && alpha(32, 5) > 20;
+  }, null, { timeout: 1800 });
+  const interruptedHold = await goldPage.evaluate(readOverlay);
+  assert.ok(interruptedHold.left <= 8 && interruptedHold.right > 20,
+    'switching palette colors must interrupt the old held beam: ' + JSON.stringify(interruptedHold));
+  await goldPage.waitForTimeout(1150);
+  manualGold = await goldPage.evaluate(readOverlay);
+  assert.ok(manualGold.right > 30 && manualGold.left <= 8,
+    'new color should retain its own gold highlight: ' + JSON.stringify(manualGold));
+  await goldPage.waitForFunction(() => {
+    const layer = document.querySelector('canvas[data-golden-flow="true"]');
+    const ctx = layer?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    const x = Math.floor(32.5 * layer.width / 40);
+    const y = Math.floor(5.5 * layer.height / 12);
+    return ctx.getImageData(x, y, 1, 1).data[3] <= 8;
+  }, null, { timeout: 2800 });
+
   assert.equal(
     await goldPage.locator('.studio-preview-stage canvas').first().evaluate(c => c.toDataURL()),
     gridBefore, 'manual palette selection should not paint until the canvas is clicked'
   );
   await goldPage.screenshot({ path: path.join(output, 'golden-flow-manual.png'), animations: 'disabled' });
   await goldPage.close();
-  console.log('PASS: left-to-right gold sweep, A/B interruption, preview-only eye, manual palette');
+  console.log('PASS: left-to-right sweep, gold 2s hold/fade, A/B interruption, eye isolate and manual palette');
 
   // A touch viewport can preview without long-press, and without invoking
   // the destructive row action.

@@ -155,9 +155,13 @@ export default function Home() {
   });
 
   // 新增：高亮相关状态
-  const [highlightRequest, setHighlightRequest] = useState<{ color: string; id: number } | null>(null);
+  const [highlightRequest, setHighlightRequest] = useState<{
+    color: string;
+    id: number;
+    mode: 'gold' | 'isolate';
+  } | null>(null);
   const highlightSequenceRef = useRef(0);
-  const highlightColorKey = highlightRequest?.color ?? null;
+  const highlightColorKey = highlightRequest?.mode === 'gold' ? highlightRequest.color : null;
 
   // 新增：完整色板切换状态
   const [showFullPalette, setShowFullPalette] = useState<boolean>(false);
@@ -1818,7 +1822,19 @@ export default function Home() {
     highlightSequenceRef.current += 1;
     setHighlightRequest({
       color: colorHex.toUpperCase(),
-      id: highlightSequenceRef.current
+      id: highlightSequenceRef.current,
+      mode: 'gold'
+    });
+  };
+
+  // The eye is a separate, non-destructive 3-second single-color view.
+  // No gold sweep or bead edits occur when it is pressed.
+  const handleIsolateColor = (colorHex: string) => {
+    highlightSequenceRef.current += 1;
+    setHighlightRequest({
+      color: colorHex.toUpperCase(),
+      id: highlightSequenceRef.current,
+      mode: 'isolate'
     });
   };
 
@@ -1826,7 +1842,7 @@ export default function Home() {
   // If the pointer has already entered B, leaving A must not cancel B.
   const handleEndColorPreview = (colorHex: string) => {
     setHighlightRequest(current =>
-      current?.color === colorHex.toUpperCase() ? null : current
+      current?.mode === 'gold' && current.color === colorHex.toUpperCase() ? null : current
     );
   };
 
@@ -2402,7 +2418,13 @@ export default function Home() {
                       key={hexKey}
                       data-color-hex={hexKey.toUpperCase()}
                       onPointerEnter={(event) => {
-                        if (event.pointerType !== 'touch' && !isExcluded) handleHighlightColor(hexKey);
+                        // Entering over the eye itself must not briefly start
+                        // a golden sweep before the user clicks isolate.
+                        const overEye = event.target instanceof Element &&
+                          !!event.target.closest('.studio-noise-preview-button');
+                        if (event.pointerType !== 'touch' && !isExcluded && !overEye) {
+                          handleHighlightColor(hexKey);
+                        }
                       }}
                       onPointerLeave={(event) => {
                         if (event.pointerType !== 'touch') handleEndColorPreview(hexKey);
@@ -2427,11 +2449,11 @@ export default function Home() {
                       <button
                         type="button"
                         className="studio-noise-preview-button"
-                        title={`仅预览 ${displayColorKey} 在图纸中的位置`}
-                        aria-label={`预览 ${displayColorKey} 颜色的位置`}
+                        title={`单色独显 ${displayColorKey} 3 秒（不会删除颜色）`}
+                        aria-label={`预览 ${displayColorKey} 颜色的位置，单色独显 3 秒`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          handleHighlightColor(hexKey);
+                          handleIsolateColor(hexKey);
                         }}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
