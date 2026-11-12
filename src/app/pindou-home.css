@@ -838,11 +838,23 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch; gap: 10px;
 }
-.studio-home .studio-edit-actions > button { min-width: 0; white-space: normal; text-align: center; }
-.studio-home .studio-edit-actions .studio-btn-archive {
-  border-color: #e9c5d8; background: #fff1f7; color: #9a5279;
+/* All three actions share exactly the same rose-on-white button treatment.
+   They are equal choices, not different disabled/secondary states. */
+.studio-home .studio-edit-actions > button {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  border: 1px solid #ead5e0;
+  background: #fff;
+  color: #985575;
+  box-shadow: 0 3px 9px rgba(150, 79, 112, .045);
 }
-.studio-home .studio-edit-actions .studio-btn-archive:not(:disabled):hover { background: #ffe4f0; border-color: #d8a1bd; }
+.studio-home .studio-edit-actions > button:not(:disabled):hover {
+  background: #fff0f7;
+  border-color: #d9a1bc;
+  color: #8f466c;
+  box-shadow: 0 6px 15px rgba(150, 79, 112, .10);
+}
 .studio-archive-save-error { grid-column: 1 / -1; margin-top: 0; }
 
 .studio-archive-modal { background: #fffafd; border-color: #ecd4e0; color: #4d3745; }
