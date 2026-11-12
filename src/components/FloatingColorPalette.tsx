@@ -152,9 +152,9 @@ const FloatingColorPalette: React.FC<FloatingColorPaletteProps> = ({
       // 执行颜色替换
       onColorReplace(colorReplaceState.sourceColor, colorData);
     } else {
-      // 高亮颜色
-      onHighlightColor(colorData.color);
-      // 选择颜色
+      // Selecting a real bead color plays the same gold sweep as hovering
+      // the noise-removal list. The transparent eraser is not a bead color.
+      if (colorData.key !== TRANSPARENT_KEY) onHighlightColor(colorData.color);
       onColorSelect(colorData);
     }
   };
