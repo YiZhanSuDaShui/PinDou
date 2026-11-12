@@ -23,6 +23,28 @@ async function runCase(label, viewport) {
   assert.match(await page.locator('footer').innerText(), /XinXinXin拼豆底稿生成器/);
   assert.equal(await page.getByRole('button', { name: '请作者喝一杯奶茶' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '帮助教程' }).count(), 0);
+  // Home restore module must be between the upload panel and the creative tip.
+  const archiveModule = page.locator('.studio-archive-import');
+  await archiveModule.waitFor();
+  const codeInput = page.getByRole('textbox', { name: '六位数字对接码' });
+  const confirmCode = archiveModule.getByRole('button', { name: '确认', exact: true });
+  assert.equal(await confirmCode.isDisabled(), true);
+  await codeInput.fill('12');
+  assert.equal(await confirmCode.isDisabled(), true);
+  await codeInput.fill('05a98b64');
+  assert.equal(await codeInput.inputValue(), '059864', 'leading zeroes must survive');
+  assert.equal(await confirmCode.isEnabled(), true);
+  await codeInput.fill('');
+  const positions = await page.evaluate(() => {
+    const upload = document.querySelector('.studio-upload-shell').getBoundingClientRect();
+    const archive = document.querySelector('.studio-archive-import').getBoundingClientRect();
+    const tip = document.querySelector('.studio-note').getBoundingClientRect();
+    return { uploadBottom: upload.bottom, archiveTop: archive.top, archiveBottom: archive.bottom, tipTop: tip.top };
+  });
+  assert.ok(positions.uploadBottom < positions.archiveTop && positions.archiveBottom < positions.tipTop,
+    label + ': archive module should sit between the upload panel and tip');
+  console.log('PASS: six-digit import UI and landing position ' + label);
+
   // A visible, restrained install pill belongs inside the header rather than
   // floating in the lower-right corner.
   const installButton = page.getByRole('button', { name: '安装应用' });
@@ -126,6 +148,17 @@ async function runCase(label, viewport) {
 try {
   const desktop = await runCase('desktop-1440', { width: 1440, height: 900 });
   const mobile = await runCase('mobile-390', { width: 390, height: 844 });
+  await mobile.locator('input[type="file"][accept*="image/png"]').setInputFiles('public/icon-192x192.png');
+  await mobile.getByRole('heading', { name: '裁剪图片' }).waitFor({ timeout: 20000 });
+  await mobile.waitForTimeout(400);
+  await mobile.getByRole('button', { name: '确认裁剪' }).click();
+  await mobile.locator('.studio-edit-actions').waitFor({ timeout: 20000 });
+  const mobileButtons = await mobile.locator('.studio-edit-actions > button').evaluateAll(items =>
+    items.map(item => { const rect = item.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width }; })
+  );
+  assert.equal(mobileButtons.length, 3, 'mobile should show three editor actions');
+  assert.ok(mobileButtons.every(item => Math.abs(item.y - mobileButtons[0].y) < 2), 'mobile actions must be side-by-side');
+  await mobile.screenshot({ path: path.join(output, 'mobile-three-actions.png'), animations: 'disabled' });
   await mobile.close();
 
   // Actual file upload -> crop -> pixel preview -> download dialog.
