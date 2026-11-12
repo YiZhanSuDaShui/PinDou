@@ -28,6 +28,8 @@ jobs:
         run: node scripts/test-siliconflow-api.mjs
       - name: Verify EdgeOne Blob CSV archives with mocked storage
         run: node scripts/test-archive-api.mjs
+      - name: Verify continuous brush and reversible five-step edit history
+        run: node --experimental-strip-types scripts/test-manual-edit-history.mjs
       - name: Type-check and create production export
         run: npm run build
       - name: Install smoke-test browser
