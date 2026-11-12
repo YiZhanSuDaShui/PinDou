@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, TouchEvent, MouseEvent, useState } from 'react';
+import GoldenSweepOverlay, { type GoldenSweepRequest } from './GoldenSweepOverlay';
 import { MappedPixel } from '../utils/pixelation';
 
 interface PixelatedPreviewCanvasProps {
@@ -16,8 +17,8 @@ interface PixelatedPreviewCanvasProps {
     isClick: boolean,
     isTouchEnd?: boolean
   ) => void;
-  highlightColorKey?: string | null;
-  onHighlightComplete?: () => void;
+  highlightRequest?: GoldenSweepRequest | null;
+  onHighlightComplete?: (id: number) => void;
 }
 
 // Canvas defaults to 300×150 when it first mounts. Image upload normally
@@ -47,9 +48,7 @@ function ensureGridCanvasAspect(canvas: HTMLCanvasElement, dims: { N: number; M:
 const drawPixelatedCanvas = (
   dataToDraw: MappedPixel[][],
   canvas: HTMLCanvasElement | null,
-  dims: { N: number; M: number } | null,
-  highlightColorKey?: string | null,
-  isHighlighting?: boolean
+  dims: { N: number; M: number } | null
 ) => {
   if (!canvas || !dims || !dataToDraw) {
     console.warn("drawPixelatedCanvas: Missing required parameters");
@@ -94,24 +93,6 @@ const drawPixelatedCanvas = (
       }
       pixelatedCtx.fillRect(drawX, drawY, cellWidthOutput, cellHeightOutput);
 
-      // 如果正在高亮且当前单元格不是目标颜色，添加半透明黑色蒙版
-      if (isHighlighting && highlightColorKey) {
-        let shouldDim = false;
-        
-        if (cellData.isExternal) {
-          // 外部单元格总是变深色（因为它们不是要高亮的颜色）
-          shouldDim = true;
-        } else {
-          // 内部单元格：如果颜色不匹配则变深色
-          shouldDim = cellData.color.toUpperCase() !== highlightColorKey.toUpperCase();
-        }
-        
-        if (shouldDim) {
-          pixelatedCtx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // 60% 透明度的黑色蒙版
-          pixelatedCtx.fillRect(drawX, drawY, cellWidthOutput, cellHeightOutput);
-        }
-      }
-
       // Draw grid lines using mode-specific color
       pixelatedCtx.strokeStyle = gridLineColor;
       pixelatedCtx.strokeRect(drawX + 0.5, drawY + 0.5, cellWidthOutput, cellHeightOutput);
@@ -125,13 +106,12 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   isManualColoringMode,
   canvasRef,
   onInteraction,
-  highlightColorKey,
+  highlightRequest,
   onHighlightComplete,
 }) => {
   const [darkModeState, setDarkModeState] = useState<boolean | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number; pageX: number; pageY: number } | null>(null);
   const touchMovedRef = useRef<boolean>(false);
-  const [isHighlighting, setIsHighlighting] = useState(false);
 
   // Effect to detect dark mode changes and update state
   useEffect(() => {
@@ -165,23 +145,9 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
       // default), so set the drawing surface to the stored grid's aspect
       // before painting. This does NOT recalculate or alter any bead colors.
       ensureGridCanvasAspect(canvasRef.current, gridDimensions);
-      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions, highlightColorKey, isHighlighting);
+      drawPixelatedCanvas(mappedPixelData, canvasRef.current, gridDimensions);
     }
-  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState, highlightColorKey, isHighlighting]); // Add darkModeState dependency
-
-  // 处理高亮效果
-  useEffect(() => {
-    if (highlightColorKey && mappedPixelData && gridDimensions) {
-      setIsHighlighting(true);
-      // 0.3秒后结束高亮
-      const timer = setTimeout(() => {
-        setIsHighlighting(false);
-        onHighlightComplete?.();
-      }, 300);
-
-      return () => clearTimeout(timer);
-    }
-  }, [highlightColorKey, mappedPixelData, gridDimensions, onHighlightComplete]);
+  }, [mappedPixelData, gridDimensions, canvasRef, darkModeState]);
 
   // --- 鼠标事件处理 ---
   
@@ -263,6 +229,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   };
 
   return (
+    <div className="relative inline-block max-w-full align-middle">
     <canvas
       ref={canvasRef}
       onMouseMove={handleMouseMove}
@@ -280,6 +247,14 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
         // touchAction: 'none' // 移除此行以允许页面滚动和缩放
       }}
     />
+      <GoldenSweepOverlay
+        sourceCanvasRef={canvasRef}
+        mappedPixelData={mappedPixelData}
+        gridDimensions={gridDimensions}
+        request={highlightRequest || null}
+        onComplete={onHighlightComplete}
+      />
+    </div>
   );
 };
 

@@ -893,3 +893,50 @@
   }
   .studio-home .studio-edit-actions > button svg { width: 18px; height: 18px; flex-shrink: 0; }
 }
+
+
+/* Gold-flow color location: a quiet rose eye control that previews without
+   removing a bead color. The main row action remains a separate delete button. */
+.studio-home .studio-noise-row {
+  min-height: 44px;
+  padding: 0 5px 0 0;
+}
+.studio-home .studio-noise-main {
+  min-height: 42px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.studio-home .studio-noise-main:focus-visible,
+.studio-home .studio-noise-preview-button:focus-visible {
+  outline: 2px solid #b96a91;
+  outline-offset: 2px;
+}
+.studio-home .studio-noise-preview-button {
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #ebcddd;
+  border-radius: 12px;
+  background: #fff8fc;
+  color: #a45c80;
+  box-shadow: 0 2px 7px rgba(145, 66, 110, .045);
+  transition: background-color .18s ease, border-color .18s ease, opacity .18s ease;
+}
+.studio-home .studio-noise-preview-button:hover {
+  border-color: #d3a0ba;
+  background: #ffeaf4;
+  color: #8c4168;
+}
+@media (hover: hover) and (pointer: fine) {
+  .studio-home .studio-noise-preview-button { opacity: .2; }
+  .studio-home .studio-noise-row:hover .studio-noise-preview-button,
+  .studio-home .studio-noise-row:focus-within .studio-noise-preview-button { opacity: 1; }
+}
+@media (hover: none), (pointer: coarse) {
+  .studio-home .studio-noise-preview-button { opacity: 1; }
+}
